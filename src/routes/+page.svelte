@@ -1,11 +1,14 @@
 <script lang="ts">
+	import { marked } from 'marked';
+
 	let darkMode = $state(true);
 	let files: FileList | null = $state(null);
 	let dragging = $state(false);
 	let loading = $state(false);
 	let result = $state('');
+	let htmlResult = $state('');
 	let rawResponse: any = $state(null);
-	let outputMode: 'text' | 'markdown' | 'full' = $state('text');
+	let outputMode: 'formatted' | 'text' | 'markdown' | 'full' = $state('formatted');
 	let error = $state('');
 	let copied = $state(false);
 	let previewUrl = $state('');
@@ -72,13 +75,19 @@
 
 	function updateResult() {
 		if (!rawResponse) return;
+		const md = rawResponse.md_results || rawResponse.data?.md_results || extractText(rawResponse);
 		if (outputMode === 'full') {
 			result = JSON.stringify(rawResponse, null, 2);
+			htmlResult = '';
+		} else if (outputMode === 'formatted') {
+			result = '';
+			htmlResult = marked.parse(md, { async: false }) as string;
 		} else if (outputMode === 'markdown') {
-			result = rawResponse.md_results || rawResponse.data?.md_results || extractText(rawResponse);
+			result = md;
+			htmlResult = '';
 		} else {
-			const md = rawResponse.md_results || rawResponse.data?.md_results || extractText(rawResponse);
 			result = md.replace(/[#*_`~>\[\]()!|]/g, '').replace(/\n{3,}/g, '\n\n').trim();
+			htmlResult = '';
 		}
 	}
 
@@ -104,7 +113,10 @@
 	}
 
 	async function copyToClipboard() {
-		await navigator.clipboard.writeText(result);
+		const text = outputMode === 'formatted'
+			? (rawResponse?.md_results || rawResponse?.data?.md_results || result)
+			: result;
+		await navigator.clipboard.writeText(text);
 		copied = true;
 		setTimeout(() => copied = false, 2000);
 	}
@@ -175,7 +187,7 @@
 			<!-- Controls -->
 			<div class="flex flex-wrap items-center gap-3">
 				<div class="flex rounded-xl overflow-hidden border {darkMode ? 'border-slate-700 bg-dark-card' : 'border-slate-200 bg-white'}">
-					{#each [['text', 'Text'], ['markdown', 'Markdown'], ['full', 'Full JSON']] as [val, label]}
+					{#each [['formatted', 'Formatted'], ['text', 'Text'], ['markdown', 'Markdown'], ['full', 'Full JSON']] as [val, label]}
 						<button
 							onclick={() => outputMode = val as any}
 							class="px-4 py-2 text-sm font-medium transition-all {outputMode === val ? 'bg-brand text-white' : darkMode ? 'text-slate-300 hover:bg-slate-700' : 'text-slate-600 hover:bg-slate-100'}"
@@ -203,7 +215,11 @@
 					</div>
 				{/if}
 				<div class="rounded-2xl shadow-md transition-shadow hover:shadow-xl {darkMode ? 'bg-dark-card border border-slate-700/50' : 'bg-white border border-slate-200'}">
-					<pre class="p-6 text-sm leading-relaxed overflow-auto max-h-[600px] whitespace-pre-wrap break-words {darkMode ? 'text-slate-200' : 'text-slate-800'}">{result}</pre>
+					{#if outputMode === 'formatted' && htmlResult}
+						<div class="p-6 text-sm leading-relaxed overflow-auto max-h-[600px] formatted-content {darkMode ? 'text-slate-200' : 'text-slate-800'}">{@html htmlResult}</div>
+					{:else}
+						<pre class="p-6 text-sm leading-relaxed overflow-auto max-h-[600px] whitespace-pre-wrap break-words {darkMode ? 'text-slate-200' : 'text-slate-800'}">{result}</pre>
+					{/if}
 				</div>
 			</div>
 		{/if}

@@ -21,6 +21,79 @@ html.dark {
 	color-scheme: dark;
 }
 
+/* Formatted content — tables, headings, lists */
+.formatted-content h1, .formatted-content h2, .formatted-content h3 {
+	font-weight: 700;
+	margin-top: 1em;
+	margin-bottom: 0.5em;
+}
+.formatted-content h1 { font-size: 1.5rem; }
+.formatted-content h2 { font-size: 1.25rem; }
+.formatted-content h3 { font-size: 1.1rem; }
+
+.formatted-content table {
+	width: 100%;
+	border-collapse: collapse;
+	margin: 1em 0;
+	font-size: 0.875rem;
+}
+.formatted-content th,
+.formatted-content td {
+	border: 1px solid #475569;
+	padding: 0.5rem 0.75rem;
+	text-align: left;
+	vertical-align: top;
+}
+.formatted-content th {
+	font-weight: 600;
+	background: rgba(37, 99, 235, 0.15);
+}
+.formatted-content tr:nth-child(even) {
+	background: rgba(255, 255, 255, 0.03);
+}
+
+/* Light mode table styles */
+:not(.dark) .formatted-content th,
+:not(.dark) .formatted-content td {
+	border-color: #cbd5e1;
+}
+:not(.dark) .formatted-content th {
+	background: rgba(37, 99, 235, 0.08);
+}
+:not(.dark) .formatted-content tr:nth-child(even) {
+	background: rgba(0, 0, 0, 0.02);
+}
+
+.formatted-content ul, .formatted-content ol {
+	padding-left: 1.5em;
+	margin: 0.5em 0;
+}
+.formatted-content li { margin: 0.25em 0; }
+
+.formatted-content p { margin: 0.5em 0; }
+
+.formatted-content code {
+	background: rgba(255, 255, 255, 0.1);
+	padding: 0.15em 0.4em;
+	border-radius: 4px;
+	font-size: 0.85em;
+}
+.formatted-content pre {
+	background: rgba(0, 0, 0, 0.2);
+	padding: 1em;
+	border-radius: 8px;
+	overflow-x: auto;
+	margin: 0.75em 0;
+}
+.formatted-content pre code {
+	background: none;
+	padding: 0;
+}
+
+.formatted-content img {
+	display: none;
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
