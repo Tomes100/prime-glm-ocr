@@ -5,7 +5,7 @@
 	const SCAN_LIMIT = 5;
 	const STORAGE_KEY = 'prime_ocr_scans';
 
-	let darkMode = $state(true);
+	let darkMode = $state(false);
 	let dragging = $state(false);
 	let loading = $state(false);
 	let result = $state('');
@@ -467,11 +467,11 @@
 	ondrop={handleWindowDrop}
 />
 
-<div class="h-screen flex flex-col overflow-hidden transition-colors duration-300 {darkMode ? 'bg-navy text-slate-100' : 'bg-surface text-slate-900'}">
+<div class="h-screen flex flex-col overflow-hidden transition-colors duration-300 {darkMode ? 'bg-navy-deeper text-slate-100' : 'bg-white text-navy'}">
 
 	<!-- ── Full-screen drag overlay ────────────────────── -->
 	{#if dragging}
-		<div class="drag-overlay fixed inset-0 z-[100] flex items-center justify-center bg-navy/90 backdrop-blur-sm">
+		<div class="drag-overlay fixed inset-0 z-[100] flex items-center justify-center bg-navy-deeper/95 backdrop-blur-sm">
 			<div class="text-center space-y-4">
 				<div class="w-24 h-24 mx-auto rounded-3xl bg-cyan/20 border-2 border-dashed border-cyan flex items-center justify-center">
 					<svg class="w-12 h-12 text-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -485,11 +485,11 @@
 	{/if}
 
 	<!-- ── App Header ─────────────────────────────────── -->
-	<header class="flex-none h-14 border-b {darkMode ? 'border-white/10 bg-navy-light/80' : 'border-slate-200 bg-white/80'} backdrop-blur-xl flex items-center px-4 gap-3 z-40">
-		<div class="flex items-center gap-2.5">
-			<div class="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan to-cyan-dark flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-cyan/20">P</div>
-			<span class="text-sm font-bold tracking-tight">Prime OCR</span>
-		</div>
+	<header class="flex-none h-14 {darkMode ? 'border-b border-white/10 bg-navy-dark/90' : 'bg-white shadow-md'} backdrop-blur-xl flex items-center px-4 lg:px-6 gap-4 z-40 transition-all duration-300">
+		<a href="/" class="flex items-center gap-2.5">
+			<img src="https://prime-robotics.eu/logo.png" alt="Prime Robotics" class="h-8 w-auto" />
+			<span class="text-sm font-bold {darkMode ? 'text-white' : 'text-navy'} tracking-tight">OCR</span>
+		</a>
 
 		<div class="w-px h-5 {darkMode ? 'bg-white/10' : 'bg-slate-200'}"></div>
 
@@ -501,7 +501,7 @@
 
 			<div class="flex-1"></div>
 
-			<div class="hidden sm:flex items-center rounded-lg overflow-hidden border {darkMode ? 'border-white/10 bg-navy-lighter/50' : 'border-slate-200 bg-slate-50'}">
+			<div class="hidden sm:flex items-center rounded-lg overflow-hidden border {darkMode ? 'border-white/10 bg-navy-dark/50' : 'border-gray-200 bg-gray-50'}">
 				{#each [['formatted', 'Formatted'], ['text', 'Text'], ['markdown', 'MD'], ['full', 'JSON']] as [val, label]}
 					<button
 						onclick={() => outputMode = val as any}
@@ -580,15 +580,15 @@
 						<!-- Upload zone -->
 						<div class="relative group">
 							<input type="file" accept=".jpg,.jpeg,.png,.webp,.pdf" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onchange={handleFileInput} />
-							<div class="rounded-2xl border-2 border-dashed p-12 sm:p-16 transition-all duration-300
-								{darkMode ? 'border-white/15 group-hover:border-cyan/50 bg-white/[0.02]' : 'border-slate-300 group-hover:border-cyan/50 bg-white'}">
+							<div class="rounded-lg border-2 border-dashed p-12 sm:p-16 transition-all duration-300
+								{darkMode ? 'border-white/15 group-hover:border-cyan/50 bg-white/[0.03]' : 'border-gray-200 group-hover:border-cyan bg-gray-50 hover:shadow-xl'}">
 								<div class="space-y-5">
-									<div class="w-20 h-20 mx-auto rounded-2xl {darkMode ? 'bg-cyan/10' : 'bg-cyan/5'} flex items-center justify-center transition-transform group-hover:scale-110 duration-300">
-										<svg class="w-10 h-10 text-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+									<div class="w-16 h-16 mx-auto rounded-lg {darkMode ? 'bg-cyan/10' : 'bg-cyan/10'} flex items-center justify-center transition-all group-hover:bg-cyan group-hover:text-white duration-300 text-cyan">
+										<svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
 									</div>
 									<div>
-										<p class="text-xl font-semibold">Drop your document here</p>
-										<p class="text-sm mt-2 {darkMode ? 'text-slate-400' : 'text-slate-500'}">or click to browse · JPG, PNG, WebP, PDF</p>
+										<p class="text-lg font-bold {darkMode ? 'text-white' : 'text-navy'}">Drop your document here</p>
+										<p class="text-sm mt-2 {darkMode ? 'text-slate-400' : 'text-gray-500'}">or click to browse · JPG, PNG, WebP, PDF</p>
 									</div>
 								</div>
 							</div>
@@ -609,7 +609,8 @@
 					{#if !trialEnded}
 						<div class="flex flex-wrap items-center justify-center gap-3">
 							{#each [['🔍', 'Smart OCR'], ['📊', 'Layout Detection'], ['⚡', 'Instant Export']] as [icon, label]}
-								<div class="flex items-center gap-2 px-4 py-2 rounded-full text-sm {darkMode ? 'bg-white/[0.04] border border-white/10 text-slate-300' : 'bg-slate-50 border border-slate-200 text-slate-600'}">
+								<div class="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm transition-all
+									{darkMode ? 'bg-white/5 border border-white/10 text-slate-300' : 'bg-white border-2 border-gray-100 text-gray-600 hover:border-cyan/30 hover:shadow-md'}">
 									<span>{icon}</span>
 									<span class="font-medium">{label}</span>
 								</div>
@@ -646,7 +647,7 @@
 			{/if}
 
 			<!-- Mobile tabs -->
-			<div class="sm:hidden flex items-center gap-1 px-3 py-2 border-b {darkMode ? 'border-white/10 bg-navy-light/50' : 'border-slate-200 bg-slate-50'}">
+			<div class="sm:hidden flex items-center gap-1 px-3 py-2 border-b {darkMode ? 'border-white/10 bg-navy-dark/50' : 'border-gray-200 bg-gray-50'}">
 				{#each [['formatted', 'Formatted'], ['text', 'Text'], ['markdown', 'MD'], ['full', 'JSON']] as [val, label]}
 					<button onclick={() => outputMode = val as any} class="flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-all {outputMode === val ? 'bg-cyan text-white' : darkMode ? 'text-slate-400' : 'text-slate-500'}">{label}</button>
 				{/each}
@@ -656,7 +657,7 @@
 				<!-- ── Left: Preview with bbox overlays ──── -->
 				{#if previewUrl}
 					<div class="hidden md:flex flex-col min-w-0 overflow-hidden" style="width: {splitRatio}%">
-						<div class="flex-1 overflow-auto p-4 flex items-start justify-center {darkMode ? 'bg-navy/50' : 'bg-slate-50'}">
+						<div class="flex-1 overflow-auto p-4 flex items-start justify-center {darkMode ? 'bg-navy-dark/50' : 'bg-gray-100'}">
 							<!-- Image wrapper: overlays positioned as % of image -->
 							<div class="relative inline-block max-w-full max-h-full">
 								<img
@@ -679,7 +680,7 @@
 										<!-- Tooltip on hover -->
 										{#if hoveredIndex === item.index && item.content}
 											<div class="absolute left-0 bottom-full mb-1 px-2 py-1 rounded text-[10px] leading-tight max-w-64 truncate whitespace-nowrap pointer-events-none
-												{darkMode ? 'bg-navy-card text-cyan-light border border-cyan/30' : 'bg-white text-slate-700 border border-slate-300 shadow-lg'}">
+												{darkMode ? 'bg-navy-dark text-cyan-light border border-cyan/30' : 'bg-white text-gray-700 border border-gray-200 shadow-lg'}">
 												<span class="font-medium text-cyan mr-1">{item.label}</span>
 												{item.content.substring(0, 80)}{item.content.length > 80 ? '…' : ''}
 											</div>
@@ -718,23 +719,23 @@
 	</main>
 
 	<!-- ── Status Bar ─────────────────────────────────── -->
-	<footer class="flex-none h-7 border-t {darkMode ? 'border-white/5 bg-navy-light/50' : 'border-slate-200 bg-white/50'} backdrop-blur-sm flex items-center px-4 text-[11px] {darkMode ? 'text-slate-500' : 'text-slate-400'} gap-4">
-		<span>Prime OCR</span>
-		<span class="{darkMode ? 'text-white/10' : 'text-slate-200'}">·</span>
-		<a href="https://prime-robotics.eu" target="_blank" rel="noopener" class="hover:text-cyan transition-colors">Prime Robotics</a>
-		<span class="{darkMode ? 'text-white/10' : 'text-slate-200'}">·</span>
+	<footer class="flex-none h-8 border-t {darkMode ? 'border-white/5 bg-navy-dark/80' : 'border-gray-200 bg-gray-50'} flex items-center px-4 lg:px-6 text-[11px] {darkMode ? 'text-slate-500' : 'text-gray-400'} gap-4">
+		<span class="font-medium">© 2026 Prime Robotics</span>
+		<span class="{darkMode ? 'text-white/10' : 'text-gray-200'}">·</span>
+		<a href="https://prime-robotics.eu" target="_blank" rel="noopener" class="hover:text-cyan transition-colors">prime-robotics.eu</a>
+		<span class="{darkMode ? 'text-white/10' : 'text-gray-200'}">·</span>
 		<a href="/privacy" class="hover:text-cyan transition-colors">Privacy</a>
-		<span class="{darkMode ? 'text-white/10' : 'text-slate-200'}">·</span>
+		<span class="{darkMode ? 'text-white/10' : 'text-gray-200'}">·</span>
 		<a href="/terms" class="hover:text-cyan transition-colors">Terms</a>
 		{#if hasDocument && layoutItems.length > 0}
-			<span class="{darkMode ? 'text-white/10' : 'text-slate-200'}">·</span>
+			<span class="{darkMode ? 'text-white/10' : 'text-gray-200'}">·</span>
 			<span>{layoutItems.length} layout elements</span>
 		{/if}
 		<div class="flex-1"></div>
-		{#if !trialEnded}
-			<span class="{darkMode ? 'text-slate-500' : 'text-slate-400'}">{scansRemaining}/{SCAN_LIMIT} scans</span>
-		{:else}
-			<span class="text-orange-400/60">Trial ended</span>
+		{#if !trialEnded && !isAdmin}
+			<span>{scansRemaining}/{SCAN_LIMIT} free scans</span>
+		{:else if trialEnded}
+			<span class="text-orange-500/70">Trial ended</span>
 		{/if}
 	</footer>
 </div>
@@ -742,6 +743,6 @@
 <!-- Dynamic highlight style for hovered text spans -->
 <svelte:head>
 	{#if hoveredIndex !== null}
-		{@html `<style>.ocr-hover[data-index="${hoveredIndex}"]{background:rgba(6,182,212,0.2);outline:2px solid rgba(6,182,212,0.5);border-radius:2px;}</style>`}
+		{@html `<style>.ocr-hover[data-index="${hoveredIndex}"]{background:rgba(0,153,200,0.15);outline:2px solid rgba(0,153,200,0.5);border-radius:2px;}</style>`}
 	{/if}
 </svelte:head>
