@@ -22,17 +22,20 @@
 
 	// ── Scan limit tracking ─────────────────────────────
 	let scanCount = $state(0);
-	let trialEnded = $derived(scanCount >= SCAN_LIMIT);
+	let isAdmin = $state(false);
+	let trialEnded = $derived(!isAdmin && scanCount >= SCAN_LIMIT);
 	let scansRemaining = $derived(Math.max(0, SCAN_LIMIT - scanCount));
 
 	$effect(() => {
 		if (browser) {
 			const stored = localStorage.getItem(STORAGE_KEY);
 			if (stored) scanCount = parseInt(stored, 10) || 0;
+			isAdmin = localStorage.getItem('prime_ocr_admin') === 'true';
 		}
 	});
 
 	function incrementScanCount() {
+		if (isAdmin) return; // admin doesn't burn scans
 		scanCount++;
 		if (browser) localStorage.setItem(STORAGE_KEY, String(scanCount));
 	}

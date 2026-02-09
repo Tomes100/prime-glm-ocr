@@ -17,6 +17,8 @@
 			}
 			stats = await res.json();
 			authenticated = true;
+			// Grant unlimited scans on the OCR page
+			localStorage.setItem('prime_ocr_admin', 'true');
 		} catch (err) {
 			error = 'Failed to connect';
 		} finally {
