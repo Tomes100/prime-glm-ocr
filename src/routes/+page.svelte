@@ -353,10 +353,13 @@
 	}
 
 	/** Build regex pattern that matches text across <br>, whitespace, &nbsp; */
-	function buildMatchPattern(text: string): string {
-		return text
-			.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-			.replace(/\s+/g, '(?:<br\\s*/?>|\\s|&nbsp;)+');
+	function buildMatchPattern(text: string, allowTags = false): string {
+		const escaped = text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+		if (allowTags) {
+			// Allow any HTML tags (like <td>, </td>, <tr>, etc.) between words
+			return escaped.replace(/\s+/g, '(?:<[^>]*>|<br\\s*/?>|\\s|&nbsp;)*\\s*(?:<[^>]*>|<br\\s*/?>|\\s|&nbsp;)*');
+		}
+		return escaped.replace(/\s+/g, '(?:<br\\s*/?>|\\s|&nbsp;)+');
 	}
 
 	/** Try to wrap first valid (non-tag-interior) match in html */
@@ -393,10 +396,11 @@
 			plainPreview: string;
 		}> = [];
 
-		// Sort by content length descending — parents first, children nest inside
+		// Sort by content length ASCENDING — small items (table cells) first,
+		// so they get wrapped before larger parents consume their text
 		const sortedItems = [...layoutItems]
 			.filter(item => item.content && item.content.trim().length >= 2)
-			.sort((a, b) => (b.content?.length || 0) - (a.content?.length || 0));
+			.sort((a, b) => (a.content?.length || 0) - (b.content?.length || 0));
 
 		for (const item of sortedItems) {
 			const raw = item.content!.trim();
@@ -436,6 +440,23 @@
 				const escaped = plain.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 				const result = tryWrapFirst(html, escaped, item.index);
 				if (result.matched) { html = result.html; matched = true; matchType = 'exact-short'; }
+			}
+
+			// Strategy 5: Allow HTML tags between words (catches table cells, rows with <td>/<th> tags)
+			if (!matched && plain.length >= 3 && plain.length <= 500) {
+				const pattern = buildMatchPattern(plain, true);
+				const result = tryWrapFirst(html, pattern, item.index);
+				if (result.matched) { html = result.html; matched = true; matchType = 'tag-tolerant'; }
+			}
+
+			// Strategy 6: Tag-tolerant first line
+			if (!matched) {
+				const firstLine = htmlEnc(stripMd(raw.split(/\n/)[0].trim()));
+				if (firstLine.length >= 3) {
+					const pattern = buildMatchPattern(firstLine, true);
+					const result = tryWrapFirst(html, pattern, item.index);
+					if (result.matched) { html = result.html; matched = true; matchType = 'tag-tolerant-line'; }
+				}
 			}
 
 			debugItems.push({
