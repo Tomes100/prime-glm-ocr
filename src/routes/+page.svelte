@@ -105,10 +105,120 @@
 		return `left:${(x1/w)*100}%;top:${(y1/h)*100}%;width:${((x2-x1)/w)*100}%;height:${((y2-y1)/h)*100}%;`;
 	}
 
-	// ── Clean markdown: strip OCR image references ──────
+	// ── Clean markdown ──────────────────────────────────
 	function cleanMarkdown(md: string): string {
-		// Remove ![...](page=...,bbox=...) patterns that marked can't render as images
-		return md.replace(/!\[[^\]]*\]\(page=[^)]*\)/g, '');
+		// 1. Remove ![...](page=...,bbox=...) patterns that marked can't render as images
+		let cleaned = md.replace(/!\[[^\]]*\]\(page=[^)]*\)/g, '');
+
+		// 2. Convert single-column markdown tables to plain text blocks.
+		//    OCR often wraps receipt/doc text in tables which kills line breaks.
+		cleaned = convertSingleColumnTables(cleaned);
+
+		return cleaned;
+	}
+
+	function convertSingleColumnTables(md: string): string {
+		const lines = md.split('\n');
+		const output: string[] = [];
+		let i = 0;
+
+		while (i < lines.length) {
+			const line = lines[i];
+
+			// Detect table row: starts and ends with |
+			if (/^\s*\|/.test(line) && /\|\s*$/.test(line)) {
+				// Collect consecutive table lines
+				const tableLines: string[] = [];
+				const startIdx = i;
+				while (i < lines.length && /^\s*\|/.test(lines[i])) {
+					tableLines.push(lines[i]);
+					i++;
+				}
+
+				// Check if single-column: filter out separator rows, then check for inner |
+				const dataRows = tableLines.filter(r => !/^\s*\|[\s\-:]+\|\s*$/.test(r.trim()));
+				const isSingleColumn = dataRows.every(r => {
+					const inner = r.replace(/^\s*\|\s*/, '').replace(/\s*\|\s*$/, '');
+					return !inner.includes('|');
+				});
+
+				if (isSingleColumn && dataRows.length > 0) {
+					// Convert each row to a paragraph
+					for (const row of dataRows) {
+						const content = row.replace(/^\s*\|\s*/, '').replace(/\s*\|\s*$/, '').trim();
+						if (content) {
+							output.push(content);
+							output.push(''); // blank line = paragraph break
+						}
+					}
+				} else {
+					// Multi-column table — keep as-is
+					for (let j = startIdx; j < startIdx + tableLines.length; j++) {
+						output.push(lines[j]);
+					}
+				}
+			} else {
+				output.push(line);
+				i++;
+			}
+		}
+
+		return output.join('\n');
+	}
+
+	// ── Use layout items to reconstruct line breaks ─────
+	// If a layout item's bbox contains multiple child items stacked vertically,
+	// replace the parent content with children joined by \n
+	function insertLineBreaksFromLayout(md: string, items: LayoutItem[]): string {
+		if (items.length < 2) return md;
+
+		// Build parent→children map: parent = item whose bbox fully contains others
+		const processed = new Set<number>();
+		const replacements: [string, string][] = [];
+
+		for (const parent of items) {
+			const [px1, py1, px2, py2] = parent.bbox_2d;
+			if (!parent.content || parent.content.trim().length < 10) continue;
+
+			// Find children: smaller items fully inside parent's bbox
+			const children = items.filter(child => {
+				if (child.index === parent.index || !child.content) return false;
+				if (processed.has(child.index)) return false;
+				const [cx1, cy1, cx2, cy2] = child.bbox_2d;
+				// Fully contained with some tolerance (2px)
+				return cx1 >= px1 - 2 && cy1 >= py1 - 2 && cx2 <= px2 + 2 && cy2 <= py2 + 2;
+			});
+
+			if (children.length >= 2) {
+				// Sort children top-to-bottom, then left-to-right
+				children.sort((a, b) => {
+					const dy = a.bbox_2d[1] - b.bbox_2d[1];
+					if (Math.abs(dy) > 5) return dy; // different lines
+					return a.bbox_2d[0] - b.bbox_2d[0]; // same line, left to right
+				});
+
+				const reconstructed = children
+					.map(c => c.content!.trim())
+					.filter(Boolean)
+					.join('\n');
+
+				if (reconstructed && parent.content) {
+					replacements.push([parent.content.trim(), reconstructed]);
+					children.forEach(c => processed.add(c.index));
+				}
+			}
+		}
+
+		// Apply replacements to the markdown (longest first to avoid partial matches)
+		replacements.sort((a, b) => b[0].length - a[0].length);
+		for (const [original, replacement] of replacements) {
+			const escaped = original.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+			try {
+				md = md.replace(new RegExp(escaped, 's'), replacement);
+			} catch { /* skip */ }
+		}
+
+		return md;
 	}
 
 	// ── File processing ─────────────────────────────────
@@ -187,8 +297,10 @@
 	}
 
 	function buildFormattedHtml(md: string): string {
-		const cleaned = cleanMarkdown(md);
-		let html = marked.parse(cleaned, { async: false, breaks: true }) as string;
+		let processed = cleanMarkdown(md);
+		// Use layout items to reconstruct line breaks within concatenated blocks
+		processed = insertLineBreaksFromLayout(processed, layoutItems);
+		let html = marked.parse(processed, { async: false, breaks: true }) as string;
 
 		// Try to wrap layout item content with data-index spans for bidirectional hover.
 		// Sort by content length descending so longer (parent) items are matched first,
@@ -232,10 +344,10 @@
 			result = '';
 			htmlResult = buildFormattedHtml(md);
 		} else if (outputMode === 'markdown') {
-			result = cleanMarkdown(md);
+			result = insertLineBreaksFromLayout(cleanMarkdown(md), layoutItems);
 			htmlResult = '';
 		} else {
-			result = cleanMarkdown(md)
+			result = insertLineBreaksFromLayout(cleanMarkdown(md), layoutItems)
 				.replace(/!\[.*?\]\(.*?\)/g, '')
 				.replace(/\[([^\]]*)\]\(.*?\)/g, '$1')
 				.replace(/#{1,6}\s*/g, '')
