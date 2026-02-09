@@ -94,6 +94,17 @@ html.dark {
 	display: none;
 }
 
+/* Hoverable OCR text spans */
+.formatted-content .ocr-hover {
+	border-radius: 2px;
+	transition: background-color 0.15s ease;
+	cursor: default;
+}
+.formatted-content .ocr-hover:hover {
+	background: rgba(37, 99, 235, 0.2);
+	outline: 1px solid rgba(37, 99, 235, 0.4);
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }

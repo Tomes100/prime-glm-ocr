@@ -7,10 +7,11 @@
 	let result = $state('');
 	let htmlResult = $state('');
 	let rawResponse: any = $state(null);
-	let outputMode: 'formatted' | 'layout' | 'text' | 'markdown' | 'full' = $state('formatted');
+	let outputMode: 'formatted' | 'text' | 'markdown' | 'full' = $state('formatted');
 	let error = $state('');
 	let copied = $state(false);
 	let previewUrl = $state('');
+	let showPreview = $state(true);
 	let hoveredIndex: number | null = $state(null);
 	let imageEl: HTMLImageElement | null = $state(null);
 	let imageContainerEl: HTMLDivElement | null = $state(null);
@@ -19,7 +20,7 @@
 		index: number;
 		label: string;
 		content?: string;
-		bbox_2d: number[]; // [x1%, y1%, x2%, y2%] as percentage of width/height
+		bbox_2d: number[];
 		width: number;
 		height: number;
 	}
@@ -28,7 +29,6 @@
 		rawResponse?.layout_details?.[0]?.filter((item: LayoutItem) => item.content) || []
 	);
 
-	// Compute highlight box position relative to displayed image
 	let highlightStyle = $derived.by(() => {
 		if (hoveredIndex === null || !imageEl || !imageContainerEl) return '';
 		const item = layoutItems.find((l: LayoutItem) => l.index === hoveredIndex);
@@ -37,16 +37,13 @@
 		const imgRect = imageEl.getBoundingClientRect();
 		const containerRect = imageContainerEl.getBoundingClientRect();
 
-		// bbox_2d values are in pixels of original image, item.width/height are original dimensions
 		const origW = item.width;
 		const origH = item.height;
 		const [x1, y1, x2, y2] = item.bbox_2d;
 
-		// Scale to displayed image size
 		const scaleX = imgRect.width / origW;
 		const scaleY = imgRect.height / origH;
 
-		// Offset of image within container
 		const offsetX = imgRect.left - containerRect.left;
 		const offsetY = imgRect.top - containerRect.top;
 
@@ -95,11 +92,8 @@
 			previewUrl = URL.createObjectURL(file);
 		} else if (file.type === 'application/pdf') {
 			previewUrl = '';
-			// Render first page of PDF to image using pdf.js from CDN
 			try {
 				const cdnBase = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174';
-
-				// Load pdf.js from CDN if not already loaded
 				if (!(window as any).pdfjsLib) {
 					await new Promise<void>((resolve, reject) => {
 						const s = document.createElement('script');
@@ -109,7 +103,6 @@
 						document.head.appendChild(s);
 					});
 				}
-
 				const pdfjs = (window as any).pdfjsLib;
 				if (pdfjs) {
 					pdfjs.GlobalWorkerOptions.workerSrc = `${cdnBase}/pdf.worker.min.js`;
@@ -155,6 +148,25 @@
 		}
 	}
 
+	function buildFormattedHtml(md: string): string {
+		// Render markdown to HTML
+		let html = marked.parse(md, { async: false }) as string;
+
+		// If we have layout items, try to make text content hoverable
+		// by wrapping matching text in spans with data-index attributes
+		if (layoutItems.length > 0) {
+			for (const item of layoutItems) {
+				if (!item.content || item.content.length < 3) continue;
+				// Escape special regex chars in content
+				const escaped = item.content.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+				// Only replace first occurrence to avoid duplicates
+				const regex = new RegExp(`(?<!data-index="\\d*">)(${escaped})`, '');
+				html = html.replace(regex, `<span class="ocr-hover" data-index="${item.index}">$1</span>`);
+			}
+		}
+		return html;
+	}
+
 	function updateResult() {
 		if (!rawResponse) return;
 		const md = rawResponse.md_results || rawResponse.data?.md_results || extractText(rawResponse);
@@ -163,11 +175,7 @@
 			htmlResult = '';
 		} else if (outputMode === 'formatted') {
 			result = '';
-			htmlResult = marked.parse(md, { async: false }) as string;
-		} else if (outputMode === 'layout') {
-			// Layout mode uses layout_details for interactive bbox hover
-			result = '';
-			htmlResult = '';
+			htmlResult = buildFormattedHtml(md);
 		} else if (outputMode === 'markdown') {
 			result = md;
 			htmlResult = '';
@@ -225,12 +233,21 @@
 		a.click();
 		URL.revokeObjectURL(url);
 	}
+
+	function handleFormattedHover(e: MouseEvent) {
+		const target = (e.target as HTMLElement).closest('.ocr-hover');
+		if (target) {
+			hoveredIndex = parseInt(target.getAttribute('data-index') || '-1');
+		} else {
+			hoveredIndex = null;
+		}
+	}
 </script>
 
 <div class="min-h-screen transition-colors duration-300 {darkMode ? 'bg-dark text-slate-100' : 'bg-light-surface text-slate-900'}">
 	<!-- Header -->
 	<header class="border-b {darkMode ? 'border-slate-700/50 bg-dark/80' : 'border-slate-200 bg-white/80'} backdrop-blur-xl sticky top-0 z-50">
-		<div class="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+		<div class="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
 			<div class="flex items-center gap-3">
 				<div class="w-10 h-10 rounded-xl bg-brand flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-brand/30">P</div>
 				<div>
@@ -244,7 +261,7 @@
 		</div>
 	</header>
 
-	<main class="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-8">
+	<main class="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-6">
 		<!-- Upload Area -->
 		<div
 			class="relative rounded-2xl border-2 border-dashed p-8 sm:p-12 text-center transition-all duration-300 cursor-pointer
@@ -278,11 +295,11 @@
 			<div class="rounded-2xl p-4 bg-red-500/10 border border-red-500/20 text-red-400 text-sm">{error}</div>
 		{/if}
 
-		{#if result || htmlResult || (outputMode === 'layout' && layoutItems.length > 0)}
+		{#if result || htmlResult || rawResponse}
 			<!-- Controls -->
 			<div class="flex flex-wrap items-center gap-3">
 				<div class="flex rounded-xl overflow-hidden border {darkMode ? 'border-slate-700 bg-dark-card' : 'border-slate-200 bg-white'}">
-					{#each [['formatted', 'Formatted'], ['layout', 'Layout'], ['text', 'Text'], ['markdown', 'Markdown'], ['full', 'Full JSON']] as [val, label]}
+					{#each [['formatted', 'Formatted'], ['text', 'Text'], ['markdown', 'Markdown'], ['full', 'Full JSON']] as [val, label]}
 						<button
 							onclick={() => outputMode = val as any}
 							class="px-4 py-2 text-sm font-medium transition-all {outputMode === val ? 'bg-brand text-white' : darkMode ? 'text-slate-300 hover:bg-slate-700' : 'text-slate-600 hover:bg-slate-100'}"
@@ -290,6 +307,14 @@
 					{/each}
 				</div>
 				<div class="flex gap-2 ml-auto">
+					{#if previewUrl}
+						<button
+							onclick={() => showPreview = !showPreview}
+							class="px-4 py-2 rounded-xl text-sm font-medium transition-all {showPreview ? 'bg-brand/20 text-brand border border-brand/30' : darkMode ? 'bg-slate-700 hover:bg-slate-600 text-slate-200' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}"
+						>
+							{showPreview ? '🖼️ Hide Preview' : '🖼️ Show Preview'}
+						</button>
+					{/if}
 					<button onclick={copyToClipboard} class="px-4 py-2 rounded-xl text-sm font-medium transition-all {darkMode ? 'bg-slate-700 hover:bg-slate-600 text-slate-200' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}">
 						{copied ? '✓ Copied' : '📋 Copy'}
 					</button>
@@ -302,64 +327,43 @@
 				</div>
 			</div>
 
-			<!-- Result with Image Preview -->
-			<div class="grid gap-6 lg:grid-cols-2">
-				<!-- Image with highlight overlay -->
-				{#if previewUrl}
-					<div
-						bind:this={imageContainerEl}
-						class="relative rounded-2xl overflow-hidden shadow-md {darkMode ? 'bg-dark-card' : 'bg-white'} p-2"
-					>
-						<img
-							bind:this={imageEl}
-							src={previewUrl}
-							alt="Preview"
-							class="w-full rounded-xl object-contain max-h-[700px]"
-						/>
-						{#if hoveredIndex !== null && highlightStyle}
-							<div
-								class="absolute pointer-events-none rounded-sm border-2 border-brand bg-brand/20 transition-all duration-150"
-								style={highlightStyle}
-							></div>
-						{/if}
-					</div>
-				{/if}
-
-				<!-- Text output -->
-				<div class="rounded-2xl shadow-md transition-shadow hover:shadow-xl {darkMode ? 'bg-dark-card border border-slate-700/50' : 'bg-white border border-slate-200'}">
-					{#if outputMode === 'layout' && layoutItems.length > 0}
-						<!-- Interactive layout items with hover highlighting -->
-						<div class="p-6 text-sm leading-relaxed overflow-auto max-h-[700px] space-y-1">
-							{#each layoutItems as item (item.index)}
-								<div
-									class="px-2 py-1 rounded cursor-default transition-colors duration-100
-										{hoveredIndex === item.index
-											? 'bg-brand/20 border-l-2 border-brand'
-											: darkMode ? 'hover:bg-slate-700/50' : 'hover:bg-slate-100'}"
-									onmouseenter={() => hoveredIndex = item.index}
-									onmouseleave={() => hoveredIndex = null}
-									role="listitem"
-								>
-									{#if item.label === 'paragraph_title'}
-										<strong class="{darkMode ? 'text-slate-100' : 'text-slate-900'}">{item.content}</strong>
-									{:else}
-										<span class="{darkMode ? 'text-slate-300' : 'text-slate-700'}">{item.content}</span>
-									{/if}
-								</div>
-							{/each}
-						</div>
-					{:else if outputMode === 'formatted' && htmlResult}
-						<div class="p-6 text-sm leading-relaxed overflow-auto max-h-[700px] formatted-content {darkMode ? 'text-slate-200' : 'text-slate-800'}">{@html htmlResult}</div>
-					{:else}
-						<pre class="p-6 text-sm leading-relaxed overflow-auto max-h-[700px] whitespace-pre-wrap break-words {darkMode ? 'text-slate-200' : 'text-slate-800'}">{result}</pre>
+			<!-- Image Preview (toggle, stacked on top) -->
+			{#if previewUrl && showPreview}
+				<div
+					bind:this={imageContainerEl}
+					class="relative rounded-2xl overflow-hidden shadow-md {darkMode ? 'bg-dark-card' : 'bg-white'} p-2"
+				>
+					<img
+						bind:this={imageEl}
+						src={previewUrl}
+						alt="Document preview"
+						class="w-full rounded-xl object-contain max-h-[600px]"
+					/>
+					{#if hoveredIndex !== null && highlightStyle}
+						<div
+							class="absolute pointer-events-none rounded-sm border-2 border-brand bg-brand/20 transition-all duration-150"
+							style={highlightStyle}
+						></div>
 					{/if}
 				</div>
+			{/if}
 
-				<!-- If no preview, show text full width (already handled by grid) -->
+			<!-- Content (full width below) -->
+			<div class="rounded-2xl shadow-md transition-shadow hover:shadow-xl {darkMode ? 'bg-dark-card border border-slate-700/50' : 'bg-white border border-slate-200'}">
+				{#if outputMode === 'formatted' && htmlResult}
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<div
+						class="p-6 text-sm leading-relaxed overflow-auto max-h-[800px] formatted-content {darkMode ? 'text-slate-200' : 'text-slate-800'}"
+						onmouseover={handleFormattedHover}
+						onmouseout={() => hoveredIndex = null}
+					>{@html htmlResult}</div>
+				{:else}
+					<pre class="p-6 text-sm leading-relaxed overflow-auto max-h-[800px] whitespace-pre-wrap break-words {darkMode ? 'text-slate-200' : 'text-slate-800'}">{result}</pre>
+				{/if}
 			</div>
 		{/if}
 
-		{#if !result && !htmlResult && !rawResponse && !loading && !error}
+		{#if !rawResponse && !loading && !error}
 			<!-- Features -->
 			<div class="grid sm:grid-cols-3 gap-4 pt-4">
 				{#each [
