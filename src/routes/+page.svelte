@@ -19,6 +19,7 @@
 	let fileName = $state('');
 	let splitRatio = $state(50);
 	let resizing = $state(false);
+	let mobileView: 'result' | 'preview' = $state('result');
 
 	// ── Scan limit tracking ─────────────────────────────
 	let scanCount = $state(0);
@@ -804,13 +805,34 @@
 			{/if}
 
 			<!-- Mobile tabs -->
-			<div class="sm:hidden flex items-center gap-1 px-3 py-2 border-b {darkMode ? 'border-white/10 bg-navy-dark/50' : 'border-gray-200 bg-gray-50'}">
+			<div class="md:hidden flex items-center gap-1 px-3 py-2 border-b {darkMode ? 'border-white/10 bg-navy-dark/50' : 'border-gray-200 bg-gray-50'}">
+				{#if previewUrl}
+					<button onclick={() => mobileView = 'preview'} class="px-3 py-1.5 rounded-md text-xs font-medium transition-all {mobileView === 'preview' ? 'bg-cyan text-white' : darkMode ? 'text-slate-400' : 'text-slate-500'}">
+						<svg class="w-4 h-4 inline -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+					</button>
+					<div class="w-px h-5 {darkMode ? 'bg-white/10' : 'bg-slate-200'}"></div>
+				{/if}
 				{#each [['formatted', 'Formatted'], ['text', 'Text'], ['markdown', 'MD'], ['full', 'JSON']] as [val, label]}
-					<button onclick={() => outputMode = val as any} class="flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-all {outputMode === val ? 'bg-cyan text-white' : darkMode ? 'text-slate-400' : 'text-slate-500'}">{label}</button>
+					<button onclick={() => { outputMode = val as any; mobileView = 'result'; }} class="flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-all {outputMode === val && mobileView === 'result' ? 'bg-cyan text-white' : darkMode ? 'text-slate-400' : 'text-slate-500'}">{label}</button>
 				{/each}
 			</div>
 
-			<div class="flex h-full min-h-0 panel-enter">
+			<!-- ── Mobile Preview (shown when mobileView=preview) ── -->
+			{#if previewUrl && mobileView === 'preview'}
+				<div class="md:hidden flex-1 overflow-auto p-4 flex items-start justify-center {darkMode ? 'bg-navy-dark/50' : 'bg-gray-100'}">
+					<div class="relative inline-block max-w-full">
+						<img src={previewUrl} alt="Document preview" class="block max-w-full max-h-[calc(100vh-10rem)] object-contain rounded-lg shadow-xl {darkMode ? 'shadow-black/30' : 'shadow-slate-300/50'}" />
+						{#each sortedOverlays as item, i (item.index)}
+							<div
+								class="absolute rounded-sm border border-cyan/40 bg-cyan/10"
+								style="{overlayStyle(item)}z-index:{10 + i};"
+							></div>
+						{/each}
+					</div>
+				</div>
+			{/if}
+
+			<div class="flex h-full min-h-0 panel-enter {mobileView === 'preview' ? 'hidden md:flex' : ''}">
 				<!-- ── Left: Preview with bbox overlays ──── -->
 				{#if previewUrl}
 					<div class="hidden md:flex flex-col min-w-0 overflow-hidden" style="width: {splitRatio}%">
