@@ -188,7 +188,7 @@
 
 	function buildFormattedHtml(md: string): string {
 		const cleaned = cleanMarkdown(md);
-		let html = marked.parse(cleaned, { async: false }) as string;
+		let html = marked.parse(cleaned, { async: false, breaks: true }) as string;
 
 		// Try to wrap layout item content with data-index spans for bidirectional hover.
 		// Sort by content length descending so longer (parent) items are matched first,
