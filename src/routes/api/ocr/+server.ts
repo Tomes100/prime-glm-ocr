@@ -1,8 +1,9 @@
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
+import { recordScan } from '$lib/scan-store';
 import type { RequestHandler } from './$types';
 
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 	const apiKey = env.GLM_OCR_API_KEY;
 	if (!apiKey) {
 		return json({ error: 'API key not configured' }, { status: 500 });
@@ -14,9 +15,6 @@ export const POST: RequestHandler = async ({ request }) => {
 		if (!file) {
 			return json({ error: 'No file provided' }, { status: 400 });
 		}
-
-		// If it's a data URI, the Z.AI API may need it as-is or just base64
-		// Try sending as-is first — the API accepts data URIs for images
 
 		const response = await fetch('https://api.z.ai/api/paas/v4/layout_parsing', {
 			method: 'POST',
@@ -38,6 +36,13 @@ export const POST: RequestHandler = async ({ request }) => {
 		}
 
 		const data = await response.json();
+
+		// Record the scan for admin stats
+		try {
+			const ip = getClientAddress();
+			recordScan(ip, body.fileName || 'unknown');
+		} catch { /* don't fail the request over stats */ }
+
 		return json(data);
 	} catch (err) {
 		return json({ error: 'Server error', details: String(err) }, { status: 500 });

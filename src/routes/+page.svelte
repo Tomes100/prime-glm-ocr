@@ -1,5 +1,9 @@
 <script lang="ts">
 	import { marked } from 'marked';
+	import { browser } from '$app/environment';
+
+	const SCAN_LIMIT = 5;
+	const STORAGE_KEY = 'prime_ocr_scans';
 
 	let darkMode = $state(true);
 	let dragging = $state(false);
@@ -15,6 +19,23 @@
 	let fileName = $state('');
 	let splitRatio = $state(50);
 	let resizing = $state(false);
+
+	// ── Scan limit tracking ─────────────────────────────
+	let scanCount = $state(0);
+	let trialEnded = $derived(scanCount >= SCAN_LIMIT);
+	let scansRemaining = $derived(Math.max(0, SCAN_LIMIT - scanCount));
+
+	$effect(() => {
+		if (browser) {
+			const stored = localStorage.getItem(STORAGE_KEY);
+			if (stored) scanCount = parseInt(stored, 10) || 0;
+		}
+	});
+
+	function incrementScanCount() {
+		scanCount++;
+		if (browser) localStorage.setItem(STORAGE_KEY, String(scanCount));
+	}
 
 	interface LayoutItem {
 		index: number;
@@ -273,13 +294,19 @@
 			previewUrl = '';
 		}
 
+		// Check scan limit
+		if (trialEnded) {
+			error = 'Free trial ended. Contact us for continued access.';
+			return;
+		}
+
 		loading = true;
 		try {
 			const base64 = await fileToBase64(file);
 			const res = await fetch('/api/ocr', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ file: base64 })
+				body: JSON.stringify({ file: base64, fileName: file.name })
 			});
 			const data = await res.json();
 			if (!res.ok) {
@@ -288,6 +315,7 @@
 				return;
 			}
 			rawResponse = data;
+			incrementScanCount();
 			updateResult();
 		} catch (err) {
 			error = 'Failed to process file: ' + String(err);
@@ -523,30 +551,68 @@
 				{/if}
 
 				<div class="relative w-full max-w-xl space-y-8 text-center">
-					<div class="relative group">
-						<input type="file" accept=".jpg,.jpeg,.png,.webp,.pdf" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onchange={handleFileInput} />
-						<div class="rounded-2xl border-2 border-dashed p-12 sm:p-16 transition-all duration-300
-							{darkMode ? 'border-white/15 group-hover:border-cyan/50 bg-white/[0.02]' : 'border-slate-300 group-hover:border-cyan/50 bg-white'}">
+					{#if trialEnded}
+						<!-- Trial ended state -->
+						<div class="rounded-2xl p-12 sm:p-16 {darkMode ? 'bg-white/[0.02] border border-white/10' : 'bg-white border border-slate-200'}">
 							<div class="space-y-5">
-								<div class="w-20 h-20 mx-auto rounded-2xl {darkMode ? 'bg-cyan/10' : 'bg-cyan/5'} flex items-center justify-center transition-transform group-hover:scale-110 duration-300">
-									<svg class="w-10 h-10 text-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+								<div class="w-20 h-20 mx-auto rounded-2xl {darkMode ? 'bg-orange-500/10' : 'bg-orange-50'} flex items-center justify-center">
+									<svg class="w-10 h-10 {darkMode ? 'text-orange-400' : 'text-orange-500'}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
 								</div>
 								<div>
-									<p class="text-xl font-semibold">Drop your document here</p>
-									<p class="text-sm mt-2 {darkMode ? 'text-slate-400' : 'text-slate-500'}">or click to browse · JPG, PNG, WebP, PDF</p>
+									<p class="text-xl font-semibold">Free trial ended</p>
+									<p class="text-sm mt-2 {darkMode ? 'text-slate-400' : 'text-slate-500'}">You've used all {SCAN_LIMIT} free scans. Get in touch for full access.</p>
+								</div>
+								<a
+									href="https://prime-robotics.eu/contact"
+									target="_blank"
+									rel="noopener noreferrer"
+									class="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-cyan text-white font-semibold hover:bg-cyan-light transition-all shadow-lg shadow-cyan/20"
+								>
+									Contact Us
+									<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+								</a>
+							</div>
+						</div>
+					{:else}
+						<!-- Upload zone -->
+						<div class="relative group">
+							<input type="file" accept=".jpg,.jpeg,.png,.webp,.pdf" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onchange={handleFileInput} />
+							<div class="rounded-2xl border-2 border-dashed p-12 sm:p-16 transition-all duration-300
+								{darkMode ? 'border-white/15 group-hover:border-cyan/50 bg-white/[0.02]' : 'border-slate-300 group-hover:border-cyan/50 bg-white'}">
+								<div class="space-y-5">
+									<div class="w-20 h-20 mx-auto rounded-2xl {darkMode ? 'bg-cyan/10' : 'bg-cyan/5'} flex items-center justify-center transition-transform group-hover:scale-110 duration-300">
+										<svg class="w-10 h-10 text-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+									</div>
+									<div>
+										<p class="text-xl font-semibold">Drop your document here</p>
+										<p class="text-sm mt-2 {darkMode ? 'text-slate-400' : 'text-slate-500'}">or click to browse · JPG, PNG, WebP, PDF</p>
+									</div>
 								</div>
 							</div>
 						</div>
-					</div>
 
-					<div class="flex flex-wrap items-center justify-center gap-3">
-						{#each [['🔍', 'Smart OCR'], ['📊', 'Layout Detection'], ['⚡', 'Instant Export']] as [icon, label]}
-							<div class="flex items-center gap-2 px-4 py-2 rounded-full text-sm {darkMode ? 'bg-white/[0.04] border border-white/10 text-slate-300' : 'bg-slate-50 border border-slate-200 text-slate-600'}">
-								<span>{icon}</span>
-								<span class="font-medium">{label}</span>
+						<!-- Scan counter -->
+						<div class="flex items-center justify-center gap-2">
+							<div class="flex gap-1">
+								{#each Array(SCAN_LIMIT) as _, i}
+									<div class="w-2 h-2 rounded-full transition-all {i < scanCount ? 'bg-cyan' : darkMode ? 'bg-white/15' : 'bg-slate-200'}"></div>
+								{/each}
 							</div>
-						{/each}
-					</div>
+							<span class="text-xs {darkMode ? 'text-slate-400' : 'text-slate-500'}">{scansRemaining} free scan{scansRemaining === 1 ? '' : 's'} remaining</span>
+						</div>
+					{/if}
+
+					<!-- Feature badges -->
+					{#if !trialEnded}
+						<div class="flex flex-wrap items-center justify-center gap-3">
+							{#each [['🔍', 'Smart OCR'], ['📊', 'Layout Detection'], ['⚡', 'Instant Export']] as [icon, label]}
+								<div class="flex items-center gap-2 px-4 py-2 rounded-full text-sm {darkMode ? 'bg-white/[0.04] border border-white/10 text-slate-300' : 'bg-slate-50 border border-slate-200 text-slate-600'}">
+									<span>{icon}</span>
+									<span class="font-medium">{label}</span>
+								</div>
+							{/each}
+						</div>
+					{/if}
 				</div>
 			</div>
 
@@ -647,14 +713,20 @@
 	<footer class="flex-none h-7 border-t {darkMode ? 'border-white/5 bg-navy-light/50' : 'border-slate-200 bg-white/50'} backdrop-blur-sm flex items-center px-4 text-[11px] {darkMode ? 'text-slate-500' : 'text-slate-400'} gap-4">
 		<span>Prime OCR</span>
 		<span class="{darkMode ? 'text-white/10' : 'text-slate-200'}">·</span>
-		<span>Powered by GLM-OCR</span>
+		<a href="https://prime-robotics.eu" target="_blank" rel="noopener" class="hover:text-cyan transition-colors">Prime Robotics</a>
+		<span class="{darkMode ? 'text-white/10' : 'text-slate-200'}">·</span>
+		<a href="/privacy" class="hover:text-cyan transition-colors">Privacy</a>
+		<span class="{darkMode ? 'text-white/10' : 'text-slate-200'}">·</span>
+		<a href="/terms" class="hover:text-cyan transition-colors">Terms</a>
 		{#if hasDocument && layoutItems.length > 0}
 			<span class="{darkMode ? 'text-white/10' : 'text-slate-200'}">·</span>
-			<span>{layoutItems.length} layout elements detected</span>
+			<span>{layoutItems.length} layout elements</span>
 		{/if}
 		<div class="flex-1"></div>
-		{#if hasDocument && previewUrl}
-			<span class="text-cyan/60">Hover regions on the image to see detected content</span>
+		{#if !trialEnded}
+			<span class="{darkMode ? 'text-slate-500' : 'text-slate-400'}">{scansRemaining}/{SCAN_LIMIT} scans</span>
+		{:else}
+			<span class="text-orange-400/60">Trial ended</span>
 		{/if}
 	</footer>
 </div>
