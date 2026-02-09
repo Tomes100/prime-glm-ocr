@@ -9,6 +9,7 @@ interface ScanRecord {
 
 let totalScans = 0;
 let scanHistory: ScanRecord[] = [];
+let debugLogs: any[] = [];
 const startTime = Date.now();
 
 function hashIP(ip: string): string {
@@ -31,6 +32,15 @@ export function recordScan(ip: string, fileName: string) {
 	});
 	// Keep last 500 entries
 	if (scanHistory.length > 500) scanHistory = scanHistory.slice(-500);
+}
+
+export function addDebugLog(log: any) {
+	debugLogs.push({ ...log, serverTimestamp: Date.now() });
+	if (debugLogs.length > 20) debugLogs = debugLogs.slice(-20);
+}
+
+export function getDebugLogs() {
+	return debugLogs.slice().reverse();
 }
 
 export function getStats() {

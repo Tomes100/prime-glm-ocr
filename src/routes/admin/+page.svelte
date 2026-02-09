@@ -3,7 +3,10 @@
 	let authenticated = $state(false);
 	let error = $state('');
 	let stats: any = $state(null);
+	let debugLogs: any[] = $state([]);
+	let localDebug: any = $state(null);
 	let loading = $state(false);
+	let showDebug = $state(false);
 
 	async function login() {
 		error = '';
@@ -17,8 +20,8 @@
 			}
 			stats = await res.json();
 			authenticated = true;
-			// Grant unlimited scans on the OCR page
 			localStorage.setItem('prime_ocr_admin', 'true');
+			loadDebugData();
 		} catch (err) {
 			error = 'Failed to connect';
 		} finally {
@@ -30,6 +33,20 @@
 		try {
 			const res = await fetch(`/api/admin/stats?key=${encodeURIComponent(password)}`);
 			if (res.ok) stats = await res.json();
+			loadDebugData();
+		} catch {}
+	}
+
+	async function loadDebugData() {
+		// Local debug from localStorage (same browser)
+		try {
+			const raw = localStorage.getItem('prime_ocr_debug');
+			if (raw) localDebug = JSON.parse(raw);
+		} catch {}
+		// Server debug logs
+		try {
+			const res = await fetch(`/api/admin/debug?key=${encodeURIComponent(password)}`);
+			if (res.ok) debugLogs = await res.json();
 		} catch {}
 	}
 
@@ -193,6 +210,109 @@
 					</div>
 				</div>
 			{/if}
+
+			<!-- Debug Log -->
+			<div class="rounded-xl bg-white/[0.03] border border-white/10 p-5 space-y-3">
+				<div class="flex items-center justify-between">
+					<h3 class="text-sm font-semibold text-slate-300">🔍 Hover Debug Log</h3>
+					<button onclick={() => { showDebug = !showDebug; if (showDebug) loadDebugData(); }} class="px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 hover:bg-white/10 border border-white/10 transition-all">
+						{showDebug ? 'Hide' : 'Show'}
+					</button>
+				</div>
+
+				{#if showDebug}
+					<!-- Local debug (from this browser's localStorage) -->
+					{#if localDebug}
+						<div class="space-y-2">
+							<div class="flex items-center gap-3 text-xs">
+								<span class="text-slate-400">Last scan from this browser:</span>
+								<span class="text-emerald-400 font-medium">{localDebug.matchedItems} matched</span>
+								<span class="text-red-400 font-medium">{localDebug.unmatchedItems} unmatched</span>
+								<span class="text-slate-500">of {localDebug.totalItems} total</span>
+								<span class="text-slate-500">({formatTime(localDebug.timestamp)})</span>
+							</div>
+
+							<div class="overflow-x-auto max-h-96 overflow-y-auto">
+								<table class="w-full text-xs">
+									<thead class="sticky top-0 bg-[#0A1628]">
+										<tr class="text-left text-slate-400 uppercase tracking-wider">
+											<th class="pb-2 pr-3">Idx</th>
+											<th class="pb-2 pr-3">Label</th>
+											<th class="pb-2 pr-3">Status</th>
+											<th class="pb-2 pr-3">Strategy</th>
+											<th class="pb-2 pr-3">Len</th>
+											<th class="pb-2">Content</th>
+										</tr>
+									</thead>
+									<tbody>
+										{#each localDebug.items as item}
+											<tr class="border-t border-white/5 {item.matched ? '' : 'bg-red-500/5'}">
+												<td class="py-2 pr-3 text-slate-400 font-mono">{item.index}</td>
+												<td class="py-2 pr-3 text-slate-300">
+													<span class="px-1.5 py-0.5 rounded text-[10px] bg-white/5 border border-white/10">{item.label}</span>
+												</td>
+												<td class="py-2 pr-3">
+													{#if item.matched}
+														<span class="text-emerald-400">✓</span>
+													{:else}
+														<span class="text-red-400">✗</span>
+													{/if}
+												</td>
+												<td class="py-2 pr-3 text-slate-400 font-mono">{item.matchType}</td>
+												<td class="py-2 pr-3 text-slate-400 font-mono">{item.contentLen}</td>
+												<td class="py-2 text-slate-300 truncate max-w-sm font-mono" title={item.contentPreview}>{item.contentPreview}</td>
+											</tr>
+										{/each}
+									</tbody>
+								</table>
+							</div>
+						</div>
+					{:else}
+						<p class="text-xs text-slate-500">No local debug data. Run an OCR scan first.</p>
+					{/if}
+
+					<!-- Server debug logs -->
+					{#if debugLogs.length > 0}
+						<div class="mt-4 pt-4 border-t border-white/5 space-y-2">
+							<h4 class="text-xs font-semibold text-slate-400">Server-side logs (last {debugLogs.length})</h4>
+							{#each debugLogs as log, i}
+								<details class="text-xs">
+									<summary class="cursor-pointer text-slate-300 hover:text-white py-1">
+										#{i + 1} — {formatTime(log.serverTimestamp || log.timestamp)}
+										<span class="ml-2 text-emerald-400">{log.matchedItems}✓</span>
+										<span class="ml-1 text-red-400">{log.unmatchedItems}✗</span>
+										<span class="ml-1 text-slate-500">/ {log.totalItems}</span>
+									</summary>
+									<div class="ml-4 mt-1 overflow-x-auto max-h-48 overflow-y-auto">
+										<table class="w-full text-[10px]">
+											<thead>
+												<tr class="text-slate-400">
+													<th class="text-left pr-2">Idx</th>
+													<th class="text-left pr-2">Label</th>
+													<th class="text-left pr-2">Match</th>
+													<th class="text-left pr-2">Strategy</th>
+													<th class="text-left">Content</th>
+												</tr>
+											</thead>
+											<tbody>
+												{#each log.items || [] as item}
+													<tr class="border-t border-white/5 {item.matched ? '' : 'bg-red-500/5'}">
+														<td class="py-1 pr-2 font-mono text-slate-400">{item.index}</td>
+														<td class="py-1 pr-2 text-slate-300">{item.label}</td>
+														<td class="py-1 pr-2">{item.matched ? '✓' : '✗'}</td>
+														<td class="py-1 pr-2 font-mono text-slate-400">{item.matchType}</td>
+														<td class="py-1 text-slate-300 truncate max-w-xs" title={item.contentPreview}>{item.contentPreview}</td>
+													</tr>
+												{/each}
+											</tbody>
+										</table>
+									</div>
+								</details>
+							{/each}
+						</div>
+					{/if}
+				{/if}
+			</div>
 		</main>
 	{/if}
 </div>

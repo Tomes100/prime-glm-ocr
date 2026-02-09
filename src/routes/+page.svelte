@@ -327,41 +327,146 @@
 		}
 	}
 
+	// ── Hover-wrap helpers ──────────────────────────────
+
+	/** Strip markdown syntax so we search for plain text in rendered HTML */
+	function stripMd(text: string): string {
+		return text
+			.replace(/^#{1,6}\s+/gm, '')
+			.replace(/\*\*(.+?)\*\*/g, '$1')
+			.replace(/\*(.+?)\*/g, '$1')
+			.replace(/__(.+?)__/g, '$1')
+			.replace(/_(.+?)_/g, '$1')
+			.replace(/~~(.+?)~~/g, '$1')
+			.replace(/`(.+?)`/g, '$1')
+			.replace(/!\[.*?\]\(.*?\)/g, '')
+			.replace(/\[([^\]]*)\]\(.*?\)/g, '$1')
+			.trim();
+	}
+
+	/** HTML-encode special chars to match what marked outputs */
+	function htmlEnc(text: string): string {
+		return text
+			.replace(/&/g, '&amp;')
+			.replace(/</g, '&lt;')
+			.replace(/>/g, '&gt;');
+	}
+
+	/** Build regex pattern that matches text across <br>, whitespace, &nbsp; */
+	function buildMatchPattern(text: string): string {
+		return text
+			.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+			.replace(/\s+/g, '(?:<br\\s*/?>|\\s|&nbsp;)+');
+	}
+
+	/** Try to wrap first valid (non-tag-interior) match in html */
+	function tryWrapFirst(html: string, pattern: string, index: number): { html: string; matched: boolean } {
+		try {
+			const regex = new RegExp(pattern, 'gsi');
+			let match;
+			while ((match = regex.exec(html)) !== null) {
+				const offset = match.index;
+				const before = html.substring(Math.max(0, offset - 300), offset);
+				if (/<[^>]*$/.test(before)) continue; // inside an HTML tag attribute, skip
+				const wrapped = `<span class="ocr-hover" data-index="${index}">${match[0]}</span>`;
+				return {
+					html: html.substring(0, offset) + wrapped + html.substring(offset + match[0].length),
+					matched: true
+				};
+			}
+		} catch { /* regex too complex or invalid */ }
+		return { html, matched: false };
+	}
+
 	function buildFormattedHtml(md: string): string {
 		let processed = cleanMarkdown(md);
-		// Use layout items to reconstruct line breaks within concatenated blocks
 		processed = insertLineBreaksFromLayout(processed, layoutItems);
 		let html = marked.parse(processed, { async: false, breaks: true }) as string;
 
-		// Try to wrap layout item content with data-index spans for bidirectional hover.
-		// Sort by content length descending so longer (parent) items are matched first,
-		// then shorter (child) items can match inside them.
+		const debugItems: Array<{
+			index: number;
+			label: string;
+			contentLen: number;
+			contentPreview: string;
+			matched: boolean;
+			matchType: string;
+			plainPreview: string;
+		}> = [];
+
+		// Sort by content length descending — parents first, children nest inside
 		const sortedItems = [...layoutItems]
-			.filter(item => item.content && item.content.trim().length >= 3)
+			.filter(item => item.content && item.content.trim().length >= 2)
 			.sort((a, b) => (b.content?.length || 0) - (a.content?.length || 0));
 
 		for (const item of sortedItems) {
-			const content = item.content!.trim();
-			// Escape for use in regex
-			const escaped = content
-				.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-				// Allow flexible whitespace between words
-				.replace(/\s+/g, '\\s+');
+			const raw = item.content!.trim();
+			const plain = htmlEnc(stripMd(raw));
+			let matched = false;
+			let matchType = 'none';
 
-			try {
-				// Match the content, but not if already inside a data-index attribute
-				const regex = new RegExp(`(${escaped})`, 's');
-				// Only wrap if the match isn't already inside a tag attribute
-				html = html.replace(regex, (match, p1, offset) => {
-					// Check if we're inside an HTML tag (crude check)
-					const before = html.substring(Math.max(0, offset - 200), offset);
-					if (/<[^>]*$/.test(before)) return match; // inside a tag, skip
-					return `<span class="ocr-hover" data-index="${item.index}">${p1}</span>`;
-				});
-			} catch {
-				// regex failed, skip this item
+			// Strategy 1: Full content (up to 500 chars to avoid regex explosion)
+			if (plain.length >= 2 && plain.length <= 500) {
+				const pattern = buildMatchPattern(plain);
+				const result = tryWrapFirst(html, pattern, item.index);
+				if (result.matched) { html = result.html; matched = true; matchType = 'full'; }
 			}
+
+			// Strategy 2: First line only
+			if (!matched) {
+				const firstLine = htmlEnc(stripMd(raw.split(/\n/)[0].trim()));
+				if (firstLine.length >= 3 && firstLine !== plain) {
+					const pattern = buildMatchPattern(firstLine);
+					const result = tryWrapFirst(html, pattern, item.index);
+					if (result.matched) { html = result.html; matched = true; matchType = 'first-line'; }
+				}
+			}
+
+			// Strategy 3: First 8 words (for very long or multi-paragraph content)
+			if (!matched) {
+				const words = plain.split(/\s+/).slice(0, 8).join(' ');
+				if (words.length >= 5 && words !== plain) {
+					const pattern = buildMatchPattern(words);
+					const result = tryWrapFirst(html, pattern, item.index);
+					if (result.matched) { html = result.html; matched = true; matchType = 'first-words'; }
+				}
+			}
+
+			// Strategy 4: For very short content (2-20 chars), try exact substring in HTML text
+			if (!matched && plain.length >= 2 && plain.length <= 20) {
+				const escaped = plain.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+				const result = tryWrapFirst(html, escaped, item.index);
+				if (result.matched) { html = result.html; matched = true; matchType = 'exact-short'; }
+			}
+
+			debugItems.push({
+				index: item.index,
+				label: item.label,
+				contentLen: raw.length,
+				contentPreview: raw.substring(0, 80),
+				matched,
+				matchType,
+				plainPreview: plain.substring(0, 80)
+			});
 		}
+
+		// Store debug log for admin inspection
+		if (browser) {
+			const debugLog = {
+				timestamp: Date.now(),
+				totalItems: layoutItems.length,
+				matchedItems: debugItems.filter(d => d.matched).length,
+				unmatchedItems: debugItems.filter(d => !d.matched).length,
+				items: debugItems
+			};
+			localStorage.setItem('prime_ocr_debug', JSON.stringify(debugLog));
+			// Also fire-and-forget to server
+			fetch('/api/admin/debug', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(debugLog)
+			}).catch(() => {});
+		}
+
 		return html;
 	}
 
