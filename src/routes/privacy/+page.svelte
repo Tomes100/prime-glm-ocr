@@ -25,7 +25,7 @@
 			<section>
 				<h2 class="text-lg font-semibold text-white mb-3">2. What Data We Process</h2>
 				<ul class="list-disc list-inside space-y-2 text-slate-300">
-					<li><strong>Uploaded documents:</strong> Images and PDFs you upload are sent to our OCR processing API (powered by GLM-OCR) for text extraction. <strong>We do not store your documents.</strong> They are processed in real-time and discarded immediately after the OCR result is returned.</li>
+					<li><strong>Uploaded documents:</strong> Images and PDFs you upload are processed by our OCR engine for text extraction. <strong>We do not store your documents.</strong> They are processed in real-time and discarded immediately after the result is returned.</li>
 					<li><strong>Scan count:</strong> We store a counter in your browser's local storage to track how many free scans you've used. This data never leaves your device.</li>
 					<li><strong>GDPR consent:</strong> Your cookie consent preference is stored in your browser's local storage.</li>
 					<li><strong>Basic analytics:</strong> We log anonymized scan events (hashed IP, timestamp, file name) in server memory for operational monitoring. This data is not persisted and is lost on server restart.</li>
@@ -34,7 +34,7 @@
 
 			<section>
 				<h2 class="text-lg font-semibold text-white mb-3">3. Third-Party Services</h2>
-				<p>Uploaded documents are processed by the <strong>GLM-OCR API</strong> (api.z.ai) provided by Zhipu AI. Their processing is subject to their own privacy policy. We recommend not uploading documents containing highly sensitive personal information.</p>
+				<p>Document processing is handled by our proprietary OCR pipeline. We recommend not uploading documents containing highly sensitive personal information unless necessary.</p>
 			</section>
 
 			<section>

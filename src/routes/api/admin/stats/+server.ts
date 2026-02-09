@@ -17,6 +17,6 @@ export const GET: RequestHandler = async ({ url }) => {
 	const stats = getStats();
 	return json({
 		...stats,
-		apiKeySet: !!env.GLM_OCR_API_KEY
+		apiKeySet: !!env.GLM_OCR_API_KEY || !!env.OCR_API_KEY
 	});
 };
