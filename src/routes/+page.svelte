@@ -2,7 +2,6 @@
 	import { marked } from 'marked';
 
 	let darkMode = $state(true);
-	let files: FileList | null = $state(null);
 	let dragging = $state(false);
 	let loading = $state(false);
 	let result = $state('');
@@ -12,6 +11,52 @@
 	let error = $state('');
 	let copied = $state(false);
 	let previewUrl = $state('');
+	let hoveredIndex: number | null = $state(null);
+	let imageEl: HTMLImageElement | null = $state(null);
+	let imageContainerEl: HTMLDivElement | null = $state(null);
+
+	interface LayoutItem {
+		index: number;
+		label: string;
+		content?: string;
+		bbox_2d: number[]; // [x1%, y1%, x2%, y2%] as percentage of width/height
+		width: number;
+		height: number;
+	}
+
+	let layoutItems: LayoutItem[] = $derived(
+		rawResponse?.layout_details?.[0]?.filter((item: LayoutItem) => item.content) || []
+	);
+
+	// Compute highlight box position relative to displayed image
+	let highlightStyle = $derived.by(() => {
+		if (hoveredIndex === null || !imageEl || !imageContainerEl) return '';
+		const item = layoutItems.find((l: LayoutItem) => l.index === hoveredIndex);
+		if (!item) return '';
+
+		const imgRect = imageEl.getBoundingClientRect();
+		const containerRect = imageContainerEl.getBoundingClientRect();
+
+		// bbox_2d values are in pixels of original image, item.width/height are original dimensions
+		const origW = item.width;
+		const origH = item.height;
+		const [x1, y1, x2, y2] = item.bbox_2d;
+
+		// Scale to displayed image size
+		const scaleX = imgRect.width / origW;
+		const scaleY = imgRect.height / origH;
+
+		// Offset of image within container
+		const offsetX = imgRect.left - containerRect.left;
+		const offsetY = imgRect.top - containerRect.top;
+
+		const left = offsetX + x1 * scaleX;
+		const top = offsetY + y1 * scaleY;
+		const width = (x2 - x1) * scaleX;
+		const height = (y2 - y1) * scaleY;
+
+		return `left:${left}px;top:${top}px;width:${width}px;height:${height}px;`;
+	});
 
 	function toggleDark() {
 		darkMode = !darkMode;
@@ -36,7 +81,9 @@
 	async function processFile(file: File) {
 		error = '';
 		result = '';
+		htmlResult = '';
 		rawResponse = null;
+		hoveredIndex = null;
 
 		const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
 		if (!validTypes.includes(file.type)) {
@@ -87,10 +134,10 @@
 			htmlResult = '';
 		} else {
 			result = md
-				.replace(/!\[.*?\]\(.*?\)/g, '')        // remove image markdown
-				.replace(/\[([^\]]*)\]\(.*?\)/g, '$1')  // keep link text, remove URL
-				.replace(/#{1,6}\s*/g, '')               // remove heading markers
-				.replace(/[*_`~>|]/g, '')                // remove remaining markdown chars
+				.replace(/!\[.*?\]\(.*?\)/g, '')
+				.replace(/\[([^\]]*)\]\(.*?\)/g, '$1')
+				.replace(/#{1,6}\s*/g, '')
+				.replace(/[*_`~>|]/g, '')
 				.replace(/\n{3,}/g, '\n\n')
 				.trim();
 			htmlResult = '';
@@ -216,20 +263,60 @@
 				</div>
 			</div>
 
-			<!-- Result -->
-			<div class="grid gap-6 {previewUrl ? 'lg:grid-cols-2' : ''}">
+			<!-- Result with Image Preview -->
+			<div class="grid gap-6 lg:grid-cols-2">
+				<!-- Image with highlight overlay -->
 				{#if previewUrl}
-					<div class="rounded-2xl overflow-hidden shadow-md {darkMode ? 'bg-dark-card' : 'bg-white'} p-2">
-						<img src={previewUrl} alt="Preview" class="w-full rounded-xl object-contain max-h-[500px]" />
+					<div
+						bind:this={imageContainerEl}
+						class="relative rounded-2xl overflow-hidden shadow-md {darkMode ? 'bg-dark-card' : 'bg-white'} p-2"
+					>
+						<img
+							bind:this={imageEl}
+							src={previewUrl}
+							alt="Preview"
+							class="w-full rounded-xl object-contain max-h-[700px]"
+						/>
+						{#if hoveredIndex !== null && highlightStyle}
+							<div
+								class="absolute pointer-events-none rounded-sm border-2 border-brand bg-brand/20 transition-all duration-150"
+								style={highlightStyle}
+							></div>
+						{/if}
 					</div>
 				{/if}
+
+				<!-- Text output -->
 				<div class="rounded-2xl shadow-md transition-shadow hover:shadow-xl {darkMode ? 'bg-dark-card border border-slate-700/50' : 'bg-white border border-slate-200'}">
-					{#if outputMode === 'formatted' && htmlResult}
-						<div class="p-6 text-sm leading-relaxed overflow-auto max-h-[600px] formatted-content {darkMode ? 'text-slate-200' : 'text-slate-800'}">{@html htmlResult}</div>
+					{#if outputMode === 'formatted' && layoutItems.length > 0 && previewUrl}
+						<!-- Interactive layout items with hover highlighting -->
+						<div class="p-6 text-sm leading-relaxed overflow-auto max-h-[700px] space-y-1">
+							{#each layoutItems as item (item.index)}
+								<div
+									class="px-2 py-1 rounded cursor-default transition-colors duration-100
+										{hoveredIndex === item.index
+											? 'bg-brand/20 border-l-2 border-brand'
+											: darkMode ? 'hover:bg-slate-700/50' : 'hover:bg-slate-100'}"
+									onmouseenter={() => hoveredIndex = item.index}
+									onmouseleave={() => hoveredIndex = null}
+									role="listitem"
+								>
+									{#if item.label === 'paragraph_title'}
+										<strong class="{darkMode ? 'text-slate-100' : 'text-slate-900'}">{item.content}</strong>
+									{:else}
+										<span class="{darkMode ? 'text-slate-300' : 'text-slate-700'}">{item.content}</span>
+									{/if}
+								</div>
+							{/each}
+						</div>
+					{:else if outputMode === 'formatted' && htmlResult}
+						<div class="p-6 text-sm leading-relaxed overflow-auto max-h-[700px] formatted-content {darkMode ? 'text-slate-200' : 'text-slate-800'}">{@html htmlResult}</div>
 					{:else}
-						<pre class="p-6 text-sm leading-relaxed overflow-auto max-h-[600px] whitespace-pre-wrap break-words {darkMode ? 'text-slate-200' : 'text-slate-800'}">{result}</pre>
+						<pre class="p-6 text-sm leading-relaxed overflow-auto max-h-[700px] whitespace-pre-wrap break-words {darkMode ? 'text-slate-200' : 'text-slate-800'}">{result}</pre>
 					{/if}
 				</div>
+
+				<!-- If no preview, show text full width (already handled by grid) -->
 			</div>
 		{/if}
 
