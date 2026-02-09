@@ -822,12 +822,7 @@
 				<div class="md:hidden flex-1 overflow-auto p-4 flex items-start justify-center {darkMode ? 'bg-navy-dark/50' : 'bg-gray-100'}">
 					<div class="relative inline-block max-w-full">
 						<img src={previewUrl} alt="Document preview" class="block max-w-full max-h-[calc(100vh-10rem)] object-contain rounded-lg shadow-xl {darkMode ? 'shadow-black/30' : 'shadow-slate-300/50'}" />
-						{#each sortedOverlays as item, i (item.index)}
-							<div
-								class="absolute rounded-sm border border-cyan/40 bg-cyan/10"
-								style="{overlayStyle(item)}z-index:{10 + i};"
-							></div>
-						{/each}
+						<!-- No hover overlays on mobile -->
 					</div>
 				</div>
 			{/if}
@@ -922,6 +917,6 @@
 <!-- Dynamic highlight style for hovered text spans -->
 <svelte:head>
 	{#if hoveredIndex !== null}
-		{@html `<style>.ocr-hover[data-index="${hoveredIndex}"]{background:rgba(0,153,200,0.15);outline:2px solid rgba(0,153,200,0.5);border-radius:2px;}</style>`}
+		{@html `<style>@media(min-width:768px){.ocr-hover[data-index="${hoveredIndex}"]{background:rgba(0,153,200,0.15);outline:2px solid rgba(0,153,200,0.5);border-radius:2px;}}</style>`}
 	{/if}
 </svelte:head>
