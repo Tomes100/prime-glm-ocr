@@ -12,10 +12,8 @@
 	let copied = $state(false);
 	let previewUrl = $state('');
 	let hoveredIndex: number | null = $state(null);
-	let imageEl: HTMLImageElement | null = $state(null);
-	let imageContainerEl: HTMLDivElement | null = $state(null);
 	let fileName = $state('');
-	let splitRatio = $state(50); // percentage for left panel
+	let splitRatio = $state(50);
 	let resizing = $state(false);
 
 	interface LayoutItem {
@@ -27,44 +25,28 @@
 		height: number;
 	}
 
+	// All layout items with content
 	let layoutItems: LayoutItem[] = $derived(
 		rawResponse?.layout_details?.[0]?.filter((item: LayoutItem) => item.content) || []
 	);
 
+	// Sort by area descending so smaller (nested) boxes render on top
+	let sortedOverlays: LayoutItem[] = $derived(
+		[...layoutItems].sort((a, b) => {
+			const areaA = (a.bbox_2d[2] - a.bbox_2d[0]) * (a.bbox_2d[3] - a.bbox_2d[1]);
+			const areaB = (b.bbox_2d[2] - b.bbox_2d[0]) * (b.bbox_2d[3] - b.bbox_2d[1]);
+			return areaB - areaA; // largest first → rendered first → smallest on top
+		})
+	);
+
 	let hasDocument = $derived(!!(result || htmlResult || rawResponse));
-
-	let highlightStyle = $derived.by(() => {
-		if (hoveredIndex === null || !imageEl || !imageContainerEl) return '';
-		const item = layoutItems.find((l: LayoutItem) => l.index === hoveredIndex);
-		if (!item) return '';
-
-		const imgRect = imageEl.getBoundingClientRect();
-		const containerRect = imageContainerEl.getBoundingClientRect();
-
-		const origW = item.width;
-		const origH = item.height;
-		const [x1, y1, x2, y2] = item.bbox_2d;
-
-		const scaleX = imgRect.width / origW;
-		const scaleY = imgRect.height / origH;
-
-		const offsetX = imgRect.left - containerRect.left;
-		const offsetY = imgRect.top - containerRect.top;
-
-		const left = offsetX + x1 * scaleX;
-		const top = offsetY + y1 * scaleY;
-		const width = (x2 - x1) * scaleX;
-		const height = (y2 - y1) * scaleY;
-
-		return `left:${left}px;top:${top}px;width:${width}px;height:${height}px;`;
-	});
 
 	function toggleDark() {
 		darkMode = !darkMode;
 		document.documentElement.classList.toggle('dark', darkMode);
 	}
 
-	// ── Drag & drop ─────────────────────────────────────
+	// ── Drag & drop (window-level) ──────────────────────
 	let dragCounter = 0;
 
 	function handleWindowDragEnter(e: DragEvent) {
@@ -76,33 +58,24 @@
 	function handleWindowDragLeave(e: DragEvent) {
 		e.preventDefault();
 		dragCounter--;
-		if (dragCounter <= 0) {
-			dragCounter = 0;
-			dragging = false;
-		}
+		if (dragCounter <= 0) { dragCounter = 0; dragging = false; }
 	}
 
 	function handleWindowDrop(e: DragEvent) {
 		e.preventDefault();
 		dragCounter = 0;
 		dragging = false;
-		if (e.dataTransfer?.files?.length) {
-			processFile(e.dataTransfer.files[0]);
-		}
+		if (e.dataTransfer?.files?.length) processFile(e.dataTransfer.files[0]);
 	}
 
-	function handleWindowDragOver(e: DragEvent) {
-		e.preventDefault();
-	}
+	function handleWindowDragOver(e: DragEvent) { e.preventDefault(); }
 
 	function handleFileInput(e: Event) {
 		const input = e.target as HTMLInputElement;
-		if (input.files?.length) {
-			processFile(input.files[0]);
-		}
+		if (input.files?.length) processFile(input.files[0]);
 	}
 
-	// ── Resize ──────────────────────────────────────────
+	// ── Resize handle ───────────────────────────────────
 	function startResize(e: MouseEvent) {
 		e.preventDefault();
 		resizing = true;
@@ -113,18 +86,29 @@
 
 		function onMove(ev: MouseEvent) {
 			const dx = ev.clientX - startX;
-			const newRatio = startRatio + (dx / containerWidth) * 100;
-			splitRatio = Math.max(25, Math.min(75, newRatio));
+			splitRatio = Math.max(25, Math.min(75, startRatio + (dx / containerWidth) * 100));
 		}
-
 		function onUp() {
 			resizing = false;
 			window.removeEventListener('mousemove', onMove);
 			window.removeEventListener('mouseup', onUp);
 		}
-
 		window.addEventListener('mousemove', onMove);
 		window.addEventListener('mouseup', onUp);
+	}
+
+	// ── Compute overlay style as percentage of image ────
+	function overlayStyle(item: LayoutItem): string {
+		const [x1, y1, x2, y2] = item.bbox_2d;
+		const w = item.width || 1;
+		const h = item.height || 1;
+		return `left:${(x1/w)*100}%;top:${(y1/h)*100}%;width:${((x2-x1)/w)*100}%;height:${((y2-y1)/h)*100}%;`;
+	}
+
+	// ── Clean markdown: strip OCR image references ──────
+	function cleanMarkdown(md: string): string {
+		// Remove ![...](page=...,bbox=...) patterns that marked can't render as images
+		return md.replace(/!\[[^\]]*\]\(page=[^)]*\)/g, '');
 	}
 
 	// ── File processing ─────────────────────────────────
@@ -203,13 +187,36 @@
 	}
 
 	function buildFormattedHtml(md: string): string {
-		let html = marked.parse(md, { async: false }) as string;
-		if (layoutItems.length > 0) {
-			for (const item of layoutItems) {
-				if (!item.content || item.content.length < 3) continue;
-				const escaped = item.content.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-				const regex = new RegExp(`(?<!data-index="\\d*">)(${escaped})`, '');
-				html = html.replace(regex, `<span class="ocr-hover" data-index="${item.index}">$1</span>`);
+		const cleaned = cleanMarkdown(md);
+		let html = marked.parse(cleaned, { async: false }) as string;
+
+		// Try to wrap layout item content with data-index spans for bidirectional hover.
+		// Sort by content length descending so longer (parent) items are matched first,
+		// then shorter (child) items can match inside them.
+		const sortedItems = [...layoutItems]
+			.filter(item => item.content && item.content.trim().length >= 3)
+			.sort((a, b) => (b.content?.length || 0) - (a.content?.length || 0));
+
+		for (const item of sortedItems) {
+			const content = item.content!.trim();
+			// Escape for use in regex
+			const escaped = content
+				.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+				// Allow flexible whitespace between words
+				.replace(/\s+/g, '\\s+');
+
+			try {
+				// Match the content, but not if already inside a data-index attribute
+				const regex = new RegExp(`(${escaped})`, 's');
+				// Only wrap if the match isn't already inside a tag attribute
+				html = html.replace(regex, (match, p1, offset) => {
+					// Check if we're inside an HTML tag (crude check)
+					const before = html.substring(Math.max(0, offset - 200), offset);
+					if (/<[^>]*$/.test(before)) return match; // inside a tag, skip
+					return `<span class="ocr-hover" data-index="${item.index}">${p1}</span>`;
+				});
+			} catch {
+				// regex failed, skip this item
 			}
 		}
 		return html;
@@ -217,7 +224,7 @@
 
 	function updateResult() {
 		if (!rawResponse) return;
-		const md = rawResponse.md_results || rawResponse.data?.md_results || extractText(rawResponse);
+		let md = rawResponse.md_results || rawResponse.data?.md_results || extractText(rawResponse);
 		if (outputMode === 'full') {
 			result = JSON.stringify(rawResponse, null, 2);
 			htmlResult = '';
@@ -225,10 +232,10 @@
 			result = '';
 			htmlResult = buildFormattedHtml(md);
 		} else if (outputMode === 'markdown') {
-			result = md;
+			result = cleanMarkdown(md);
 			htmlResult = '';
 		} else {
-			result = md
+			result = cleanMarkdown(md)
 				.replace(/!\[.*?\]\(.*?\)/g, '')
 				.replace(/\[([^\]]*)\]\(.*?\)/g, '$1')
 				.replace(/#{1,6}\s*/g, '')
@@ -262,7 +269,7 @@
 
 	async function copyToClipboard() {
 		const text = outputMode === 'formatted'
-			? (rawResponse?.md_results || rawResponse?.data?.md_results || result)
+			? cleanMarkdown(rawResponse?.md_results || rawResponse?.data?.md_results || result)
 			: result;
 		await navigator.clipboard.writeText(text);
 		copied = true;
@@ -271,7 +278,7 @@
 
 	function download(ext: 'txt' | 'md') {
 		const content = outputMode === 'formatted'
-			? (rawResponse?.md_results || rawResponse?.data?.md_results || result)
+			? cleanMarkdown(rawResponse?.md_results || rawResponse?.data?.md_results || result)
 			: result;
 		const blob = new Blob([content], { type: 'text/plain' });
 		const url = URL.createObjectURL(blob);
@@ -298,6 +305,14 @@
 			hoveredIndex = parseInt(target.getAttribute('data-index') || '-1');
 		} else {
 			hoveredIndex = null;
+		}
+	}
+
+	// Scroll text span into view when hovering image overlay
+	function scrollTextIntoView(index: number) {
+		const el = document.querySelector(`.ocr-hover[data-index="${index}"]`);
+		if (el) {
+			el.scrollIntoView({ behavior: 'smooth', block: 'center' });
 		}
 	}
 </script>
@@ -328,28 +343,21 @@
 
 	<!-- ── App Header ─────────────────────────────────── -->
 	<header class="flex-none h-14 border-b {darkMode ? 'border-white/10 bg-navy-light/80' : 'border-slate-200 bg-white/80'} backdrop-blur-xl flex items-center px-4 gap-3 z-40">
-		<!-- Logo -->
 		<div class="flex items-center gap-2.5">
 			<div class="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan to-cyan-dark flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-cyan/20">P</div>
 			<span class="text-sm font-bold tracking-tight">Prime OCR</span>
 		</div>
 
-		<!-- Divider -->
 		<div class="w-px h-5 {darkMode ? 'bg-white/10' : 'bg-slate-200'}"></div>
 
 		{#if hasDocument && fileName}
-			<!-- File name -->
 			<div class="flex items-center gap-2 text-sm {darkMode ? 'text-slate-400' : 'text-slate-500'}">
-				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-				</svg>
+				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
 				<span class="truncate max-w-48">{fileName}</span>
 			</div>
 
-			<!-- Spacer -->
 			<div class="flex-1"></div>
 
-			<!-- Output mode tabs -->
 			<div class="hidden sm:flex items-center rounded-lg overflow-hidden border {darkMode ? 'border-white/10 bg-navy-lighter/50' : 'border-slate-200 bg-slate-50'}">
 				{#each [['formatted', 'Formatted'], ['text', 'Text'], ['markdown', 'MD'], ['full', 'JSON']] as [val, label]}
 					<button
@@ -359,7 +367,6 @@
 				{/each}
 			</div>
 
-			<!-- Actions -->
 			<div class="flex items-center gap-1">
 				<button onclick={copyToClipboard} class="p-2 rounded-lg text-sm transition-all {darkMode ? 'hover:bg-white/5 text-slate-400 hover:text-white' : 'hover:bg-slate-100 text-slate-500 hover:text-slate-900'}" title="Copy to clipboard">
 					{#if copied}
@@ -368,16 +375,13 @@
 						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
 					{/if}
 				</button>
-				<button onclick={() => download('txt')} class="p-2 rounded-lg text-sm transition-all {darkMode ? 'hover:bg-white/5 text-slate-400 hover:text-white' : 'hover:bg-slate-100 text-slate-500 hover:text-slate-900'}" title="Download as .txt">
+				<button onclick={() => download('txt')} class="p-2 rounded-lg text-sm transition-all {darkMode ? 'hover:bg-white/5 text-slate-400 hover:text-white' : 'hover:bg-slate-100 text-slate-500 hover:text-slate-900'}" title="Download .txt">
 					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
 				</button>
-				<button onclick={() => download('md')} class="p-2 rounded-lg text-sm transition-all {darkMode ? 'hover:bg-white/5 text-slate-400 hover:text-white' : 'hover:bg-slate-100 text-slate-500 hover:text-slate-900'}" title="Download as .md">
+				<button onclick={() => download('md')} class="p-2 rounded-lg text-sm transition-all {darkMode ? 'hover:bg-white/5 text-slate-400 hover:text-white' : 'hover:bg-slate-100 text-slate-500 hover:text-slate-900'}" title="Download .md">
 					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
 				</button>
-
 				<div class="w-px h-5 mx-1 {darkMode ? 'bg-white/10' : 'bg-slate-200'}"></div>
-
-				<!-- New document -->
 				<button onclick={resetDocument} class="p-2 rounded-lg text-sm transition-all {darkMode ? 'hover:bg-white/5 text-slate-400 hover:text-white' : 'hover:bg-slate-100 text-slate-500 hover:text-slate-900'}" title="New document">
 					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
 				</button>
@@ -386,7 +390,6 @@
 			<div class="flex-1"></div>
 		{/if}
 
-		<!-- Theme toggle -->
 		<button onclick={toggleDark} class="p-2 rounded-lg transition-all {darkMode ? 'hover:bg-white/5 text-yellow-400' : 'hover:bg-slate-100 text-slate-500'}" title="Toggle theme">
 			{#if darkMode}
 				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
@@ -400,30 +403,21 @@
 	<main class="flex-1 min-h-0 overflow-hidden">
 
 		{#if !hasDocument && !loading}
-			<!-- ── Empty State: Upload ───────────────────── -->
+			<!-- ── Empty State ────────────────────────────── -->
 			<div class="h-full flex flex-col items-center justify-center px-6 relative">
-				<!-- Background gradient orbs (prime-robotics style) -->
 				{#if darkMode}
 					<div class="absolute top-1/4 -left-32 w-96 h-96 rounded-full bg-cyan/5 blur-3xl pointer-events-none"></div>
 					<div class="absolute bottom-1/4 -right-32 w-96 h-96 rounded-full bg-cyan/5 blur-3xl pointer-events-none"></div>
 				{/if}
 
 				<div class="relative w-full max-w-xl space-y-8 text-center">
-					<!-- Upload zone -->
 					<div class="relative group">
-						<input
-							type="file"
-							accept=".jpg,.jpeg,.png,.webp,.pdf"
-							class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-							onchange={handleFileInput}
-						/>
+						<input type="file" accept=".jpg,.jpeg,.png,.webp,.pdf" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onchange={handleFileInput} />
 						<div class="rounded-2xl border-2 border-dashed p-12 sm:p-16 transition-all duration-300
 							{darkMode ? 'border-white/15 group-hover:border-cyan/50 bg-white/[0.02]' : 'border-slate-300 group-hover:border-cyan/50 bg-white'}">
 							<div class="space-y-5">
 								<div class="w-20 h-20 mx-auto rounded-2xl {darkMode ? 'bg-cyan/10' : 'bg-cyan/5'} flex items-center justify-center transition-transform group-hover:scale-110 duration-300">
-									<svg class="w-10 h-10 text-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
-									</svg>
+									<svg class="w-10 h-10 text-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
 								</div>
 								<div>
 									<p class="text-xl font-semibold">Drop your document here</p>
@@ -433,15 +427,9 @@
 						</div>
 					</div>
 
-					<!-- Feature badges -->
 					<div class="flex flex-wrap items-center justify-center gap-3">
-						{#each [
-							['🔍', 'Smart OCR'],
-							['📊', 'Layout Detection'],
-							['⚡', 'Instant Export']
-						] as [icon, label]}
-							<div class="flex items-center gap-2 px-4 py-2 rounded-full text-sm
-								{darkMode ? 'bg-white/[0.04] border border-white/10 text-slate-300' : 'bg-slate-50 border border-slate-200 text-slate-600'}">
+						{#each [['🔍', 'Smart OCR'], ['📊', 'Layout Detection'], ['⚡', 'Instant Export']] as [icon, label]}
+							<div class="flex items-center gap-2 px-4 py-2 rounded-full text-sm {darkMode ? 'bg-white/[0.04] border border-white/10 text-slate-300' : 'bg-slate-50 border border-slate-200 text-slate-600'}">
 								<span>{icon}</span>
 								<span class="font-medium">{label}</span>
 							</div>
@@ -451,23 +439,19 @@
 			</div>
 
 		{:else if loading}
-			<!-- ── Loading State ─────────────────────────── -->
+			<!-- ── Loading ────────────────────────────────── -->
 			<div class="h-full flex flex-col items-center justify-center gap-4">
-				<div class="relative">
-					<div class="w-16 h-16 rounded-2xl bg-cyan/10 flex items-center justify-center">
-						<div class="w-8 h-8 border-2 border-cyan border-t-transparent rounded-full animate-spin"></div>
-					</div>
+				<div class="w-16 h-16 rounded-2xl bg-cyan/10 flex items-center justify-center">
+					<div class="w-8 h-8 border-2 border-cyan border-t-transparent rounded-full animate-spin"></div>
 				</div>
 				<div class="text-center">
 					<p class="font-medium {darkMode ? 'text-white' : 'text-slate-900'}">Processing document…</p>
-					{#if fileName}
-						<p class="text-sm mt-1 {darkMode ? 'text-slate-400' : 'text-slate-500'}">{fileName}</p>
-					{/if}
+					{#if fileName}<p class="text-sm mt-1 {darkMode ? 'text-slate-400' : 'text-slate-500'}">{fileName}</p>{/if}
 				</div>
 			</div>
 
 		{:else}
-			<!-- ── Document View: Split Pane ─────────────── -->
+			<!-- ── Document View ──────────────────────────── -->
 			{#if error}
 				<div class="mx-4 mt-4 rounded-xl p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2">
 					<svg class="w-4 h-4 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
@@ -475,39 +459,48 @@
 				</div>
 			{/if}
 
-			<!-- Mobile output mode tabs -->
+			<!-- Mobile tabs -->
 			<div class="sm:hidden flex items-center gap-1 px-3 py-2 border-b {darkMode ? 'border-white/10 bg-navy-light/50' : 'border-slate-200 bg-slate-50'}">
 				{#each [['formatted', 'Formatted'], ['text', 'Text'], ['markdown', 'MD'], ['full', 'JSON']] as [val, label]}
-					<button
-						onclick={() => outputMode = val as any}
-						class="flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-all {outputMode === val ? 'bg-cyan text-white' : darkMode ? 'text-slate-400' : 'text-slate-500'}"
-					>{label}</button>
+					<button onclick={() => outputMode = val as any} class="flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-all {outputMode === val ? 'bg-cyan text-white' : darkMode ? 'text-slate-400' : 'text-slate-500'}">{label}</button>
 				{/each}
 			</div>
 
-			<div class="flex h-full min-h-0 panel-enter {error ? 'pt-0' : ''}">
-				<!-- ── Left: Preview ──────────────────────── -->
+			<div class="flex h-full min-h-0 panel-enter">
+				<!-- ── Left: Preview with bbox overlays ──── -->
 				{#if previewUrl}
-					<div
-						class="hidden md:flex flex-col min-w-0 overflow-hidden"
-						style="width: {splitRatio}%"
-					>
-						<div
-							bind:this={imageContainerEl}
-							class="flex-1 overflow-auto p-4 relative flex items-start justify-center {darkMode ? 'bg-navy/50' : 'bg-slate-50'}"
-						>
-							<img
-								bind:this={imageEl}
-								src={previewUrl}
-								alt="Document preview"
-								class="max-w-full max-h-full object-contain rounded-lg shadow-xl {darkMode ? 'shadow-black/30' : 'shadow-slate-300/50'}"
-							/>
-							{#if hoveredIndex !== null && highlightStyle}
-								<div
-									class="absolute pointer-events-none rounded-sm border-2 border-cyan bg-cyan/20 transition-all duration-150"
-									style={highlightStyle}
-								></div>
-							{/if}
+					<div class="hidden md:flex flex-col min-w-0 overflow-hidden" style="width: {splitRatio}%">
+						<div class="flex-1 overflow-auto p-4 flex items-start justify-center {darkMode ? 'bg-navy/50' : 'bg-slate-50'}">
+							<!-- Image wrapper: overlays positioned as % of image -->
+							<div class="relative inline-block max-w-full max-h-full">
+								<img
+									src={previewUrl}
+									alt="Document preview"
+									class="block max-w-full max-h-[calc(100vh-8rem)] object-contain rounded-lg shadow-xl {darkMode ? 'shadow-black/30' : 'shadow-slate-300/50'}"
+								/>
+								<!-- Bbox overlays for ALL layout items -->
+								{#each sortedOverlays as item, i (item.index)}
+									<!-- svelte-ignore a11y_no_static_element_interactions a11y_mouse_events_have_key_events -->
+									<div
+										class="absolute rounded-sm transition-all duration-100 cursor-pointer
+											{hoveredIndex === item.index
+												? 'border-2 border-cyan bg-cyan/25 shadow-[0_0_8px_rgba(6,182,212,0.4)]'
+												: 'border border-transparent hover:border-cyan/60 hover:bg-cyan/10'}"
+										style="{overlayStyle(item)}z-index:{10 + i};"
+										onmouseenter={() => { hoveredIndex = item.index; scrollTextIntoView(item.index); }}
+										onmouseleave={() => { if (hoveredIndex === item.index) hoveredIndex = null; }}
+									>
+										<!-- Tooltip on hover -->
+										{#if hoveredIndex === item.index && item.content}
+											<div class="absolute left-0 bottom-full mb-1 px-2 py-1 rounded text-[10px] leading-tight max-w-64 truncate whitespace-nowrap pointer-events-none
+												{darkMode ? 'bg-navy-card text-cyan-light border border-cyan/30' : 'bg-white text-slate-700 border border-slate-300 shadow-lg'}">
+												<span class="font-medium text-cyan mr-1">{item.label}</span>
+												{item.content.substring(0, 80)}{item.content.length > 80 ? '…' : ''}
+											</div>
+										{/if}
+									</div>
+								{/each}
+							</div>
 						</div>
 					</div>
 
@@ -522,10 +515,7 @@
 				{/if}
 
 				<!-- ── Right: Results ─────────────────────── -->
-				<div
-					class="flex-1 min-w-0 flex flex-col overflow-hidden"
-					style={previewUrl ? `width: ${100 - splitRatio}%` : ''}
-				>
+				<div class="flex-1 min-w-0 flex flex-col overflow-hidden" style={previewUrl ? `width: ${100 - splitRatio}%` : ''}>
 					{#if outputMode === 'formatted' && htmlResult}
 						<!-- svelte-ignore a11y_no_static_element_interactions a11y_mouse_events_have_key_events -->
 						<div
@@ -551,8 +541,15 @@
 			<span>{layoutItems.length} layout elements detected</span>
 		{/if}
 		<div class="flex-1"></div>
-		{#if hasDocument}
-			<span class="text-cyan/60">Hover text to highlight on preview</span>
+		{#if hasDocument && previewUrl}
+			<span class="text-cyan/60">Hover regions on the image to see detected content</span>
 		{/if}
 	</footer>
 </div>
+
+<!-- Dynamic highlight style for hovered text spans -->
+<svelte:head>
+	{#if hoveredIndex !== null}
+		{@html `<style>.ocr-hover[data-index="${hoveredIndex}"]{background:rgba(6,182,212,0.2);outline:2px solid rgba(6,182,212,0.5);border-radius:2px;}</style>`}
+	{/if}
+</svelte:head>

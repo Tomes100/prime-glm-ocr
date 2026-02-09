@@ -106,15 +106,13 @@ html.dark {
 }
 .formatted-content img { display: none; }
 
-/* Hoverable OCR text spans */
+/* OCR text spans — highlight driven by dynamic <style> in svelte:head */
 .formatted-content .ocr-hover {
 	border-radius: 2px;
-	transition: background-color 0.15s ease;
-	cursor: default;
+	transition: background-color 0.15s ease, outline-color 0.15s ease;
 }
-.formatted-content .ocr-hover:hover {
-	background: rgba(6, 182, 212, 0.2);
-	outline: 1px solid rgba(6, 182, 212, 0.4);
+.formatted-content .ocr-hover[data-index] {
+	scroll-margin: 4rem;
 }
 
 /* ── Drag overlay ────────────────────────────────── */
