@@ -7,7 +7,7 @@
 	let result = $state('');
 	let htmlResult = $state('');
 	let rawResponse: any = $state(null);
-	let outputMode: 'formatted' | 'text' | 'markdown' | 'full' = $state('formatted');
+	let outputMode: 'formatted' | 'layout' | 'text' | 'markdown' | 'full' = $state('formatted');
 	let error = $state('');
 	let copied = $state(false);
 	let previewUrl = $state('');
@@ -164,6 +164,10 @@
 		} else if (outputMode === 'formatted') {
 			result = '';
 			htmlResult = marked.parse(md, { async: false }) as string;
+		} else if (outputMode === 'layout') {
+			// Layout mode uses layout_details for interactive bbox hover
+			result = '';
+			htmlResult = '';
 		} else if (outputMode === 'markdown') {
 			result = md;
 			htmlResult = '';
@@ -274,11 +278,11 @@
 			<div class="rounded-2xl p-4 bg-red-500/10 border border-red-500/20 text-red-400 text-sm">{error}</div>
 		{/if}
 
-		{#if result || htmlResult}
+		{#if result || htmlResult || (outputMode === 'layout' && layoutItems.length > 0)}
 			<!-- Controls -->
 			<div class="flex flex-wrap items-center gap-3">
 				<div class="flex rounded-xl overflow-hidden border {darkMode ? 'border-slate-700 bg-dark-card' : 'border-slate-200 bg-white'}">
-					{#each [['formatted', 'Formatted'], ['text', 'Text'], ['markdown', 'Markdown'], ['full', 'Full JSON']] as [val, label]}
+					{#each [['formatted', 'Formatted'], ['layout', 'Layout'], ['text', 'Text'], ['markdown', 'Markdown'], ['full', 'Full JSON']] as [val, label]}
 						<button
 							onclick={() => outputMode = val as any}
 							class="px-4 py-2 text-sm font-medium transition-all {outputMode === val ? 'bg-brand text-white' : darkMode ? 'text-slate-300 hover:bg-slate-700' : 'text-slate-600 hover:bg-slate-100'}"
@@ -323,7 +327,7 @@
 
 				<!-- Text output -->
 				<div class="rounded-2xl shadow-md transition-shadow hover:shadow-xl {darkMode ? 'bg-dark-card border border-slate-700/50' : 'bg-white border border-slate-200'}">
-					{#if outputMode === 'formatted' && layoutItems.length > 0}
+					{#if outputMode === 'layout' && layoutItems.length > 0}
 						<!-- Interactive layout items with hover highlighting -->
 						<div class="p-6 text-sm leading-relaxed overflow-auto max-h-[700px] space-y-1">
 							{#each layoutItems as item (item.index)}
@@ -355,7 +359,7 @@
 			</div>
 		{/if}
 
-		{#if !result && !htmlResult && !loading && !error}
+		{#if !result && !htmlResult && !rawResponse && !loading && !error}
 			<!-- Features -->
 			<div class="grid sm:grid-cols-3 gap-4 pt-4">
 				{#each [
