@@ -616,6 +616,11 @@
 							{/each}
 						</div>
 					{/if}
+
+					<!-- Subtle contact link -->
+					<p class="text-xs {darkMode ? 'text-slate-500' : 'text-slate-400'}">
+						Need more scans or a custom solution? <a href="https://prime-robotics.eu/contact" target="_blank" rel="noopener" class="text-cyan hover:underline">Talk to us</a>
+					</p>
 				</div>
 			</div>
 
