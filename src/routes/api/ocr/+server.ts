@@ -9,10 +9,14 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 
 	try {
-		const { file } = await request.json();
+		const body = await request.json();
+		let file = body.file;
 		if (!file) {
 			return json({ error: 'No file provided' }, { status: 400 });
 		}
+
+		// If it's a data URI, the Z.AI API may need it as-is or just base64
+		// Try sending as-is first — the API accepts data URIs for images
 
 		const response = await fetch('https://api.z.ai/api/paas/v4/layout_parsing', {
 			method: 'POST',
@@ -25,7 +29,12 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		if (!response.ok) {
 			const text = await response.text();
-			return json({ error: `API error: ${response.status}`, details: text }, { status: response.status });
+			let errorMsg = `API error: ${response.status}`;
+			try {
+				const errData = JSON.parse(text);
+				if (errData?.error?.message) errorMsg = errData.error.message;
+			} catch {}
+			return json({ error: errorMsg, details: text }, { status: response.status });
 		}
 
 		const data = await response.json();

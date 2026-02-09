@@ -57,7 +57,8 @@
 			});
 			const data = await res.json();
 			if (!res.ok) {
-				error = data.error || 'OCR failed';
+				error = data.error || `OCR failed (${res.status})`;
+				loading = false;
 				return;
 			}
 			rawResponse = data;
