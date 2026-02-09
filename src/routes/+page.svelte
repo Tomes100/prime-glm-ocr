@@ -95,20 +95,35 @@
 			previewUrl = URL.createObjectURL(file);
 		} else if (file.type === 'application/pdf') {
 			previewUrl = '';
-			// Render first page of PDF to image for preview
+			// Render first page of PDF to image using pdf.js from CDN
 			try {
-				const pdfjs = await import('pdfjs-dist');
-				pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`;
-				const arrayBuf = await file.arrayBuffer();
-				const pdf = await pdfjs.getDocument({ data: arrayBuf }).promise;
-				const page = await pdf.getPage(1);
-				const viewport = page.getViewport({ scale: 2 });
-				const canvas = document.createElement('canvas');
-				canvas.width = viewport.width;
-				canvas.height = viewport.height;
-				const ctx = canvas.getContext('2d')!;
-				await page.render({ canvasContext: ctx, viewport }).promise;
-				previewUrl = canvas.toDataURL('image/png');
+				const cdnBase = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174';
+
+				// Load pdf.js from CDN if not already loaded
+				if (!(window as any).pdfjsLib) {
+					await new Promise<void>((resolve, reject) => {
+						const s = document.createElement('script');
+						s.src = `${cdnBase}/pdf.min.js`;
+						s.onload = () => resolve();
+						s.onerror = reject;
+						document.head.appendChild(s);
+					});
+				}
+
+				const pdfjs = (window as any).pdfjsLib;
+				if (pdfjs) {
+					pdfjs.GlobalWorkerOptions.workerSrc = `${cdnBase}/pdf.worker.min.js`;
+					const arrayBuf = await file.arrayBuffer();
+					const pdf = await pdfjs.getDocument({ data: arrayBuf }).promise;
+					const page = await pdf.getPage(1);
+					const viewport = page.getViewport({ scale: 2 });
+					const canvas = document.createElement('canvas');
+					canvas.width = viewport.width;
+					canvas.height = viewport.height;
+					const ctx = canvas.getContext('2d')!;
+					await page.render({ canvasContext: ctx, viewport }).promise;
+					previewUrl = canvas.toDataURL('image/png');
+				}
 			} catch (pdfErr) {
 				console.warn('PDF preview failed:', pdfErr);
 				previewUrl = '';
@@ -308,7 +323,7 @@
 
 				<!-- Text output -->
 				<div class="rounded-2xl shadow-md transition-shadow hover:shadow-xl {darkMode ? 'bg-dark-card border border-slate-700/50' : 'bg-white border border-slate-200'}">
-					{#if outputMode === 'formatted' && layoutItems.length > 0 && previewUrl}
+					{#if outputMode === 'formatted' && layoutItems.length > 0}
 						<!-- Interactive layout items with hover highlighting -->
 						<div class="p-6 text-sm leading-relaxed overflow-auto max-h-[700px] space-y-1">
 							{#each layoutItems as item (item.index)}
