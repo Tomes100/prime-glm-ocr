@@ -122,7 +122,10 @@
 	}
 
 	function download(ext: 'txt' | 'md') {
-		const blob = new Blob([result], { type: 'text/plain' });
+		const content = outputMode === 'formatted'
+			? (rawResponse?.md_results || rawResponse?.data?.md_results || result)
+			: result;
+		const blob = new Blob([content], { type: 'text/plain' });
 		const url = URL.createObjectURL(blob);
 		const a = document.createElement('a');
 		a.href = url;
@@ -183,7 +186,7 @@
 			<div class="rounded-2xl p-4 bg-red-500/10 border border-red-500/20 text-red-400 text-sm">{error}</div>
 		{/if}
 
-		{#if result}
+		{#if result || htmlResult}
 			<!-- Controls -->
 			<div class="flex flex-wrap items-center gap-3">
 				<div class="flex rounded-xl overflow-hidden border {darkMode ? 'border-slate-700 bg-dark-card' : 'border-slate-200 bg-white'}">
@@ -224,7 +227,7 @@
 			</div>
 		{/if}
 
-		{#if !result && !loading && !error}
+		{#if !result && !htmlResult && !loading && !error}
 			<!-- Features -->
 			<div class="grid sm:grid-cols-3 gap-4 pt-4">
 				{#each [
