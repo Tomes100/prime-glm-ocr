@@ -555,39 +555,38 @@
 	<main class="flex-1 min-h-0 overflow-hidden">
 
 		{#if !hasDocument && !loading}
-			<!-- ── Empty State ────────────────────────────── -->
-			<div class="h-full overflow-y-auto">
-				<div class="min-h-full flex flex-col px-6 relative">
-					{#if darkMode}
-						<div class="absolute top-1/4 -left-32 w-96 h-96 rounded-full bg-cyan/5 blur-3xl pointer-events-none"></div>
-						<div class="absolute bottom-1/4 -right-32 w-96 h-96 rounded-full bg-cyan/5 blur-3xl pointer-events-none"></div>
-					{/if}
+			<!-- ── Empty State — fills viewport, no scroll ── -->
+			<div class="h-full flex flex-col px-6 relative overflow-hidden">
+				{#if darkMode}
+					<div class="absolute top-1/4 -left-32 w-96 h-96 rounded-full bg-cyan/5 blur-3xl pointer-events-none"></div>
+					<div class="absolute bottom-1/4 -right-32 w-96 h-96 rounded-full bg-cyan/5 blur-3xl pointer-events-none"></div>
+				{/if}
 
-					<!-- Hero + Upload section -->
-					<div class="relative w-full max-w-3xl mx-auto pt-12 lg:pt-16 pb-8 space-y-8">
-						<!-- Value Proposition -->
-						<div class="text-center space-y-4">
-							<p class="font-mono text-sm tracking-wider text-cyan font-medium">DOCUMENT INTELLIGENCE</p>
-							<h1 class="text-3xl lg:text-4xl font-bold {darkMode ? 'text-white' : 'text-navy'}">Extract text from any document.</h1>
-							<p class="text-base max-w-2xl mx-auto {darkMode ? 'text-slate-400' : 'text-gray-500'}">Upload invoices, receipts, contracts, or handwritten notes. Our OCR engine extracts structured text with layout detection — instantly.</p>
+				<!-- Hero + Upload — centered in available space -->
+				<div class="flex-1 flex items-center justify-center min-h-0">
+					<div class="relative w-full max-w-lg text-center space-y-6">
+						<div class="space-y-3">
+							<p class="font-mono text-xs tracking-wider text-cyan font-medium">DOCUMENT INTELLIGENCE</p>
+							<h1 class="text-2xl lg:text-3xl font-bold {darkMode ? 'text-white' : 'text-navy'}">Extract text from any document.</h1>
+							<p class="text-sm max-w-md mx-auto {darkMode ? 'text-slate-400' : 'text-gray-500'}">Upload invoices, receipts, contracts, or handwritten notes. Structured text with layout detection — instantly.</p>
 						</div>
 
 						{#if trialEnded}
 							<!-- Trial ended state -->
-							<div class="max-w-lg mx-auto rounded-lg border-2 p-10 sm:p-14 text-center {darkMode ? 'bg-navy-dark border-white/10' : 'bg-white border-gray-100'}">
-								<div class="space-y-5">
-									<div class="w-16 h-16 mx-auto rounded-lg {darkMode ? 'bg-orange-500/10' : 'bg-orange-50'} flex items-center justify-center">
-										<svg class="w-8 h-8 {darkMode ? 'text-orange-400' : 'text-orange-500'}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+							<div class="rounded-lg border-2 p-8 text-center {darkMode ? 'bg-navy-dark border-white/10' : 'bg-white border-gray-100'}">
+								<div class="space-y-4">
+									<div class="w-14 h-14 mx-auto rounded-lg {darkMode ? 'bg-orange-500/10' : 'bg-orange-50'} flex items-center justify-center">
+										<svg class="w-7 h-7 {darkMode ? 'text-orange-400' : 'text-orange-500'}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
 									</div>
 									<div>
-										<p class="text-xl font-semibold {darkMode ? 'text-white' : 'text-navy'}">Free trial ended</p>
-										<p class="text-sm mt-2 {darkMode ? 'text-slate-400' : 'text-slate-500'}">You've used all {SCAN_LIMIT} free scans. Get in touch for full access.</p>
+										<p class="text-lg font-semibold {darkMode ? 'text-white' : 'text-navy'}">Free trial ended</p>
+										<p class="text-sm mt-1.5 {darkMode ? 'text-slate-400' : 'text-slate-500'}">You've used all {SCAN_LIMIT} free scans. Get in touch for full access.</p>
 									</div>
 									<a
 										href="https://prime-robotics.eu/contact"
 										target="_blank"
 										rel="noopener noreferrer"
-										class="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-cyan text-white font-semibold hover:bg-cyan-dark transition-all shadow-lg shadow-cyan/20"
+										class="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-cyan text-white font-semibold text-sm hover:bg-cyan-dark transition-all shadow-lg shadow-cyan/20"
 									>
 										Contact Us
 										<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
@@ -596,74 +595,65 @@
 							</div>
 						{:else}
 							<!-- Upload zone -->
-							<div class="max-w-lg mx-auto">
-								<div class="relative group">
-									<input type="file" accept=".jpg,.jpeg,.png,.webp,.pdf" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onchange={handleFileInput} />
-									<div class="rounded-lg border-2 p-10 sm:p-14 transition-all duration-300
-										{darkMode ? 'border-white/15 group-hover:border-cyan bg-navy-dark/60' : 'border-gray-200 group-hover:border-cyan bg-gray-50/80 hover:shadow-xl'}">
-										<div class="space-y-5 text-center">
-											<div class="w-14 h-14 mx-auto rounded-lg bg-cyan/10 flex items-center justify-center transition-all group-hover:bg-cyan group-hover:text-white duration-300 text-cyan">
-												<svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
-											</div>
-											<div>
-												<span class="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-cyan text-white font-semibold text-sm hover:bg-cyan-dark transition-all shadow-md shadow-cyan/20">
-													<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-													Upload Document
-												</span>
-												<p class="text-xs mt-3 {darkMode ? 'text-slate-500' : 'text-gray-400'}">or drag and drop here</p>
-											</div>
-											<p class="text-xs {darkMode ? 'text-slate-500' : 'text-gray-400'}">Supports JPG, PNG, WebP, PDF</p>
+							<div class="relative group">
+								<input type="file" accept=".jpg,.jpeg,.png,.webp,.pdf" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onchange={handleFileInput} />
+								<div class="rounded-lg border-2 p-8 sm:p-10 transition-all duration-300
+									{darkMode ? 'border-white/15 group-hover:border-cyan bg-navy-dark/60' : 'border-gray-200 group-hover:border-cyan bg-gray-50/80 hover:shadow-xl'}">
+									<div class="space-y-4 text-center">
+										<div class="w-12 h-12 mx-auto rounded-lg bg-cyan/10 flex items-center justify-center transition-all group-hover:bg-cyan group-hover:text-white duration-300 text-cyan">
+											<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+										</div>
+										<div>
+											<span class="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-cyan text-white font-semibold text-sm hover:bg-cyan-dark transition-all shadow-md shadow-cyan/20">
+												<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+												Upload Document
+											</span>
+											<p class="text-xs mt-2.5 {darkMode ? 'text-slate-500' : 'text-gray-400'}">or drag and drop · JPG, PNG, WebP, PDF</p>
 										</div>
 									</div>
 								</div>
-
-								<!-- Scan counter -->
-								{#if !isAdmin}
-									<p class="text-center mt-3 text-xs {darkMode ? 'text-slate-500' : 'text-gray-400'}">{scansRemaining} of {SCAN_LIMIT} free scans remaining</p>
-								{/if}
 							</div>
+
+							<!-- Scan counter -->
+							{#if !isAdmin}
+								<p class="text-xs {darkMode ? 'text-slate-500' : 'text-gray-400'}">{scansRemaining} of {SCAN_LIMIT} free scans remaining</p>
+							{/if}
 						{/if}
 					</div>
-
-					<!-- Capability Showcase -->
-					{#if !trialEnded}
-						<div class="relative w-full max-w-4xl mx-auto pb-10">
-							<div class="grid grid-cols-1 sm:grid-cols-3 gap-5">
-								<!-- Card 1: Text Extraction -->
-								<div class="p-8 rounded-lg border-2 transition-all duration-300 {darkMode ? 'bg-navy-dark border-white/10 hover:border-cyan hover:shadow-xl hover:shadow-cyan/5' : 'bg-white border-gray-100 hover:border-cyan hover:shadow-xl'}">
-									<div class="w-10 h-10 rounded-lg bg-cyan/10 flex items-center justify-center text-cyan mb-4">
-										<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10 21h7a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v11m0 5l4.879-4.879m0 0a3 3 0 104.243-4.242 3 3 0 00-4.243 4.242z"/></svg>
-									</div>
-									<h3 class="font-semibold text-sm mb-1.5 {darkMode ? 'text-white' : 'text-navy'}">Text Extraction</h3>
-									<p class="text-xs leading-relaxed {darkMode ? 'text-slate-400' : 'text-gray-500'}">Extract text from printed documents, invoices, and forms with high accuracy.</p>
-								</div>
-								<!-- Card 2: Layout Detection -->
-								<div class="p-8 rounded-lg border-2 transition-all duration-300 {darkMode ? 'bg-navy-dark border-white/10 hover:border-cyan hover:shadow-xl hover:shadow-cyan/5' : 'bg-white border-gray-100 hover:border-cyan hover:shadow-xl'}">
-									<div class="w-10 h-10 rounded-lg bg-cyan/10 flex items-center justify-center text-cyan mb-4">
-										<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"/></svg>
-									</div>
-									<h3 class="font-semibold text-sm mb-1.5 {darkMode ? 'text-white' : 'text-navy'}">Layout Detection</h3>
-									<p class="text-xs leading-relaxed {darkMode ? 'text-slate-400' : 'text-gray-500'}">Preserve document structure including tables, columns, and formatting.</p>
-								</div>
-								<!-- Card 3: Multiple Formats -->
-								<div class="p-8 rounded-lg border-2 transition-all duration-300 {darkMode ? 'bg-navy-dark border-white/10 hover:border-cyan hover:shadow-xl hover:shadow-cyan/5' : 'bg-white border-gray-100 hover:border-cyan hover:shadow-xl'}">
-									<div class="w-10 h-10 rounded-lg bg-cyan/10 flex items-center justify-center text-cyan mb-4">
-										<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-									</div>
-									<h3 class="font-semibold text-sm mb-1.5 {darkMode ? 'text-white' : 'text-navy'}">Multiple Formats</h3>
-									<p class="text-xs leading-relaxed {darkMode ? 'text-slate-400' : 'text-gray-500'}">Export results as formatted text, Markdown, or raw data.</p>
-								</div>
-							</div>
-						</div>
-
-						<!-- Contact CTA banner -->
-						<div class="relative w-full max-w-4xl mx-auto pb-8">
-							<div class="rounded-lg px-6 py-4 text-center text-sm {darkMode ? 'bg-navy-dark/60 border border-white/5 text-slate-400' : 'bg-gray-50 border border-gray-100 text-gray-500'}">
-								Need more scans or a custom solution? <a href="https://prime-robotics.eu/contact" target="_blank" rel="noopener" class="text-cyan font-medium hover:underline">Talk to us</a>
-							</div>
-						</div>
-					{/if}
 				</div>
+
+				<!-- Bottom row: feature pills + CTA — compact, no scroll -->
+				{#if !trialEnded}
+					<div class="flex-none pb-5 relative">
+						<div class="max-w-3xl mx-auto space-y-3">
+							<!-- Feature pills -->
+							<div class="flex flex-wrap items-center justify-center gap-3">
+								<div class="flex items-center gap-2 px-3.5 py-2 rounded-lg border {darkMode ? 'bg-navy-dark/60 border-white/8' : 'bg-white border-gray-100'}">
+									<div class="w-7 h-7 rounded bg-cyan/10 flex items-center justify-center text-cyan flex-none">
+										<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10 21h7a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v11m0 5l4.879-4.879m0 0a3 3 0 104.243-4.242 3 3 0 00-4.243 4.242z"/></svg>
+									</div>
+									<span class="text-xs font-medium {darkMode ? 'text-slate-300' : 'text-slate-600'}">Text Extraction</span>
+								</div>
+								<div class="flex items-center gap-2 px-3.5 py-2 rounded-lg border {darkMode ? 'bg-navy-dark/60 border-white/8' : 'bg-white border-gray-100'}">
+									<div class="w-7 h-7 rounded bg-cyan/10 flex items-center justify-center text-cyan flex-none">
+										<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"/></svg>
+									</div>
+									<span class="text-xs font-medium {darkMode ? 'text-slate-300' : 'text-slate-600'}">Layout Detection</span>
+								</div>
+								<div class="flex items-center gap-2 px-3.5 py-2 rounded-lg border {darkMode ? 'bg-navy-dark/60 border-white/8' : 'bg-white border-gray-100'}">
+									<div class="w-7 h-7 rounded bg-cyan/10 flex items-center justify-center text-cyan flex-none">
+										<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+									</div>
+									<span class="text-xs font-medium {darkMode ? 'text-slate-300' : 'text-slate-600'}">Multiple Formats</span>
+								</div>
+							</div>
+							<!-- Subtle CTA -->
+							<p class="text-center text-xs {darkMode ? 'text-slate-500' : 'text-gray-400'}">
+								Need more scans or a custom solution? <a href="https://prime-robotics.eu/contact" target="_blank" rel="noopener" class="text-cyan font-medium hover:underline">Talk to us</a>
+							</p>
+						</div>
+					</div>
+				{/if}
 			</div>
 
 		{:else if loading}
