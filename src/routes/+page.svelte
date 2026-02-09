@@ -86,7 +86,13 @@
 			result = md;
 			htmlResult = '';
 		} else {
-			result = md.replace(/[#*_`~>\[\]()!|]/g, '').replace(/\n{3,}/g, '\n\n').trim();
+			result = md
+				.replace(/!\[.*?\]\(.*?\)/g, '')        // remove image markdown
+				.replace(/\[([^\]]*)\]\(.*?\)/g, '$1')  // keep link text, remove URL
+				.replace(/#{1,6}\s*/g, '')               // remove heading markers
+				.replace(/[*_`~>|]/g, '')                // remove remaining markdown chars
+				.replace(/\n{3,}/g, '\n\n')
+				.trim();
 			htmlResult = '';
 		}
 	}
