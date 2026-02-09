@@ -93,6 +93,26 @@
 
 		if (file.type.startsWith('image/')) {
 			previewUrl = URL.createObjectURL(file);
+		} else if (file.type === 'application/pdf') {
+			previewUrl = '';
+			// Render first page of PDF to image for preview
+			try {
+				const pdfjs = await import('pdfjs-dist');
+				pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`;
+				const arrayBuf = await file.arrayBuffer();
+				const pdf = await pdfjs.getDocument({ data: arrayBuf }).promise;
+				const page = await pdf.getPage(1);
+				const viewport = page.getViewport({ scale: 2 });
+				const canvas = document.createElement('canvas');
+				canvas.width = viewport.width;
+				canvas.height = viewport.height;
+				const ctx = canvas.getContext('2d')!;
+				await page.render({ canvasContext: ctx, viewport }).promise;
+				previewUrl = canvas.toDataURL('image/png');
+			} catch (pdfErr) {
+				console.warn('PDF preview failed:', pdfErr);
+				previewUrl = '';
+			}
 		} else {
 			previewUrl = '';
 		}
