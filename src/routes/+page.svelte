@@ -362,12 +362,7 @@
 			const { grade, emoji, color } = resolveGrade(compositeScore);
 			gradeResult = {
 				grade, score: compositeScore, emoji, color,
-				breakdown: {
-					...(gradeData?.breakdown || {}),
-					imageQuality: gradeData?.imageScore ?? 50,
-					tesseractConfidence: gradeData?.tesseractScore ?? 50,
-					composite: compositeScore
-				}
+				breakdown: gradeData?.breakdown || {}
 			};
 		} catch (err) {
 			error = 'Failed to process file: ' + String(err);
@@ -740,8 +735,7 @@
 									['Resolution', gradeResult.breakdown.resolution],
 									['Sharpness', gradeResult.breakdown.sharpness],
 									['Contrast', gradeResult.breakdown.contrast],
-									['Word Confidence', gradeResult.breakdown.wordConfidence],
-									['Low-Conf Words', gradeResult.breakdown.lowConfWords]
+									['OCR Confidence', gradeResult.breakdown.tesseractConfidence]
 								] as [label, value]}
 									{#if value !== undefined}
 										<div class="flex items-center gap-2">
