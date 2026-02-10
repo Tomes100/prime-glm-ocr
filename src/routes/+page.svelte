@@ -15,8 +15,12 @@
 	let error = $state('');
 	let copied = $state(false);
 	let previewUrl = $state('');
+	let imageBase64 = $state('');
 	let hoveredIndex: number | null = $state(null);
 	let fileName = $state('');
+	let enhancing = $state(false);
+	let enhanced = $state(false);
+	let enhancedMd = $state('');
 	let splitRatio = $state(50);
 	let resizing = $state(false);
 	let mobileView: 'result' | 'preview' = $state('result');
@@ -305,8 +309,11 @@
 		}
 
 		loading = true;
+		enhanced = false;
+		enhancedMd = '';
 		try {
 			const base64 = await fileToBase64(file);
+			imageBase64 = base64;
 			const res = await fetch('/api/ocr', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
@@ -492,9 +499,34 @@
 		return html;
 	}
 
+	async function enhanceDocument() {
+		if (!rawResponse || !imageBase64 || enhancing) return;
+		enhancing = true;
+		try {
+			const md = rawResponse.md_results || rawResponse.data?.md_results || extractText(rawResponse);
+			const res = await fetch('/api/enhance', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ image: imageBase64, extractedText: md })
+			});
+			const data = await res.json();
+			if (!res.ok) {
+				error = data.error || 'Enhancement failed';
+				return;
+			}
+			enhancedMd = data.enhanced;
+			enhanced = true;
+			updateResult();
+		} catch (err) {
+			error = 'Enhancement failed: ' + String(err);
+		} finally {
+			enhancing = false;
+		}
+	}
+
 	function updateResult() {
 		if (!rawResponse) return;
-		let md = rawResponse.md_results || rawResponse.data?.md_results || extractText(rawResponse);
+		let md = enhanced && enhancedMd ? enhancedMd : (rawResponse.md_results || rawResponse.data?.md_results || extractText(rawResponse));
 		if (outputMode === 'full') {
 			result = JSON.stringify(rawResponse, null, 2);
 			htmlResult = '';
@@ -655,6 +687,31 @@
 				<button onclick={() => download('md')} class="p-2 rounded-lg text-sm transition-all {darkMode ? 'hover:bg-white/5 text-slate-400 hover:text-white' : 'hover:bg-slate-100 text-slate-500 hover:text-slate-900'}" title="Download .md">
 					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
 				</button>
+				<div class="w-px h-5 mx-1 {darkMode ? 'bg-white/10' : 'bg-slate-200'}"></div>
+				{#if !enhanced}
+					<button
+						onclick={enhanceDocument}
+						disabled={enhancing}
+						class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all
+							{enhancing
+								? 'bg-amber-500/20 text-amber-400 cursor-wait'
+								: 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 hover:text-amber-400 border border-amber-500/20'}"
+						title="Enhance with AI — reconstruct with higher fidelity"
+					>
+						{#if enhancing}
+							<div class="w-3.5 h-3.5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin"></div>
+							Enhancing…
+						{:else}
+							<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
+							Enhance ✨
+						{/if}
+					</button>
+				{:else}
+					<span class="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-500/10 text-green-500 border border-green-500/20">
+						<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+						Enhanced
+					</span>
+				{/if}
 				<div class="w-px h-5 mx-1 {darkMode ? 'bg-white/10' : 'bg-slate-200'}"></div>
 				<button onclick={resetDocument} class="p-2 rounded-lg text-sm transition-all {darkMode ? 'hover:bg-white/5 text-slate-400 hover:text-white' : 'hover:bg-slate-100 text-slate-500 hover:text-slate-900'}" title="New document">
 					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
