@@ -21,7 +21,11 @@ export const POST: RequestHandler = async ({ request }) => {
 			imageUrl = `data:image/png;base64,${image}`;
 		}
 
+		const controller = new AbortController();
+		const timeout = setTimeout(() => controller.abort(), 120000); // 2 min timeout
+
 		const response = await fetch('https://api.moonshot.ai/v1/chat/completions', {
+			signal: controller.signal,
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
@@ -62,6 +66,8 @@ Rules:
 				max_tokens: 8192
 			})
 		});
+
+		clearTimeout(timeout);
 
 		if (!response.ok) {
 			const text = await response.text();

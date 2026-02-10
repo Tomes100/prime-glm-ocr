@@ -19,6 +19,8 @@
 	let hoveredIndex: number | null = $state(null);
 	let fileName = $state('');
 	let enhancing = $state(false);
+	let enhanceSeconds = $state(0);
+	let enhanceTimer: ReturnType<typeof setInterval> | null = null;
 	let enhanced = $state(false);
 	let enhancedMd = $state('');
 	let splitRatio = $state(50);
@@ -502,6 +504,8 @@
 	async function enhanceDocument() {
 		if (!rawResponse || !imageBase64 || enhancing) return;
 		enhancing = true;
+		enhanceSeconds = 0;
+		enhanceTimer = setInterval(() => enhanceSeconds++, 1000);
 		try {
 			const md = rawResponse.md_results || rawResponse.data?.md_results || extractText(rawResponse);
 			const res = await fetch('/api/enhance', {
@@ -521,6 +525,7 @@
 			error = 'Enhancement failed: ' + String(err);
 		} finally {
 			enhancing = false;
+			if (enhanceTimer) { clearInterval(enhanceTimer); enhanceTimer = null; }
 		}
 	}
 
@@ -700,7 +705,7 @@
 					>
 						{#if enhancing}
 							<div class="w-3.5 h-3.5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin"></div>
-							Enhancing…
+							Enhancing… {enhanceSeconds}s
 						{:else}
 							<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
 							Enhance ✨
