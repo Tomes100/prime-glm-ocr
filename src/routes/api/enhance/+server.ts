@@ -58,7 +58,7 @@ Rules:
 						]
 					}
 				],
-				temperature: 0.1,
+				temperature: 1,
 				max_tokens: 8192
 			})
 		});
