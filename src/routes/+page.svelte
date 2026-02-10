@@ -258,33 +258,7 @@
 	}
 
 	// ── Document Quality Grade helpers ──────────────────
-	function computeOcrQuality(data: any, imgWidth: number, imgHeight: number): { score: number; breakdown: Record<string, number> } {
-		const items: LayoutItem[] = data?.layout_details?.[0]?.filter((item: LayoutItem) => item.content) || [];
-		const imageArea = (imgWidth || 1) * (imgHeight || 1);
-
-		// Text density: ratio of total bbox area to image area
-		let totalBboxArea = 0;
-		for (const item of items) {
-			const [x1, y1, x2, y2] = item.bbox_2d;
-			totalBboxArea += Math.abs((x2 - x1) * (y2 - y1));
-		}
-		const density = totalBboxArea / imageArea;
-		const densityScore = density < 0.02 ? 15 : density < 0.1 ? 40 : density < 0.3 ? 70 : 90;
-
-		// Fragment detection: many very short items = noise
-		const shortItems = items.filter(i => (i.content?.trim().length || 0) < 3).length;
-		const fragRatio = items.length > 0 ? shortItems / items.length : 0;
-		const fragScore = fragRatio > 0.5 ? 20 : fragRatio > 0.3 ? 50 : fragRatio > 0.1 ? 75 : 95;
-
-		// Character anomaly: consecutive special chars
-		const allText = items.map(i => i.content || '').join(' ');
-		const anomalies = (allText.match(/[^a-zA-Z0-9\s.,;:!?'"()\-\/\\€$£%@#&+=]{3,}/g) || []).length;
-		const anomalyRatio = allText.length > 0 ? anomalies / (allText.length / 100) : 0;
-		const anomalyScore = anomalyRatio > 0.5 ? 20 : anomalyRatio > 0.2 ? 50 : anomalyRatio > 0.05 ? 75 : 95;
-
-		const score = Math.round(densityScore * 0.4 + fragScore * 0.3 + anomalyScore * 0.3);
-		return { score, breakdown: { textDensity: densityScore, fragments: fragScore, anomalies: anomalyScore } };
-	}
+	// Grade now computed entirely server-side (sharp + Tesseract)
 
 	function resolveGrade(score: number): { grade: string; emoji: string; color: string } {
 		if (score >= 75) return { grade: 'A', emoji: '🟢', color: 'green' };
@@ -383,20 +357,15 @@
 			incrementScanCount();
 			updateResult();
 
-			// Compute composite grade
-			const imgW = gradeData?.meta?.width || 1;
-			const imgH = gradeData?.meta?.height || 1;
-			const ocrQuality = computeOcrQuality(data, imgW, imgH);
-			const imageScore = gradeData?.imageScore ?? 50;
-			const compositeScore = Math.round(imageScore * 0.5 + ocrQuality.score * 0.5);
+			// Use server-computed composite grade (sharp + Tesseract)
+			const compositeScore = gradeData?.compositeScore ?? 50;
 			const { grade, emoji, color } = resolveGrade(compositeScore);
 			gradeResult = {
 				grade, score: compositeScore, emoji, color,
 				breakdown: {
 					...(gradeData?.breakdown || {}),
-					...ocrQuality.breakdown,
-					imageQuality: imageScore,
-					ocrQuality: ocrQuality.score,
+					imageQuality: gradeData?.imageScore ?? 50,
+					tesseractConfidence: gradeData?.tesseractScore ?? 50,
 					composite: compositeScore
 				}
 			};
@@ -771,9 +740,8 @@
 									['Resolution', gradeResult.breakdown.resolution],
 									['Sharpness', gradeResult.breakdown.sharpness],
 									['Contrast', gradeResult.breakdown.contrast],
-									['Text Density', gradeResult.breakdown.textDensity],
-									['Fragment Quality', gradeResult.breakdown.fragments],
-									['Char Anomalies', gradeResult.breakdown.anomalies]
+									['Word Confidence', gradeResult.breakdown.wordConfidence],
+									['Low-Conf Words', gradeResult.breakdown.lowConfWords]
 								] as [label, value]}
 									{#if value !== undefined}
 										<div class="flex items-center gap-2">
