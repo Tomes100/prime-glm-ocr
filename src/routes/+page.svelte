@@ -18,6 +18,7 @@
 	let imageBase64 = $state('');
 	let hoveredIndex: number | null = $state(null);
 	let fileName = $state('');
+	let fileType = $state('');
 	let enhancing = $state(false);
 	let enhanceSeconds = $state(0);
 	let enhanceTimer: ReturnType<typeof setInterval> | null = null;
@@ -260,6 +261,7 @@
 		rawResponse = null;
 		hoveredIndex = null;
 		fileName = file.name;
+		fileType = file.type;
 
 		const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
 		if (!validTypes.includes(file.type)) {
@@ -693,7 +695,7 @@
 					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
 				</button>
 				<div class="w-px h-5 mx-1 {darkMode ? 'bg-white/10' : 'bg-slate-200'}"></div>
-				{#if !enhanced}
+				{#if !enhanced && fileType !== 'application/pdf'}
 					<button
 						onclick={enhanceDocument}
 						disabled={enhancing}
@@ -711,7 +713,7 @@
 							Enhance ✨
 						{/if}
 					</button>
-				{:else}
+				{:else if enhanced}
 					<span class="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-500/10 text-green-500 border border-green-500/20">
 						<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
 						Enhanced
