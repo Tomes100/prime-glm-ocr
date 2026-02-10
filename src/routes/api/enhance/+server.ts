@@ -32,7 +32,7 @@ export const POST: RequestHandler = async ({ request }) => {
 				'Authorization': `Bearer ${apiKey}`
 			},
 			body: JSON.stringify({
-				model: 'kimi-k2.5',
+				model: 'moonshot-v1-128k-vision-preview',
 				messages: [
 					{
 						role: 'system',
@@ -62,7 +62,7 @@ Rules:
 						]
 					}
 				],
-				temperature: 1,
+				temperature: 0.1,
 				max_tokens: 8192
 			})
 		});
