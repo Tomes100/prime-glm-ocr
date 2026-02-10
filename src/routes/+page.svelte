@@ -28,6 +28,10 @@
 	let resizing = $state(false);
 	let mobileView: 'result' | 'preview' = $state('result');
 
+	// ── Document Quality Grade ──────────────────────────
+	let gradeResult: { grade: string; score: number; emoji: string; color: string; breakdown: Record<string, number> } | null = $state(null);
+	let gradePopover = $state(false);
+
 	// ── Scan limit tracking ─────────────────────────────
 	let scanCount = $state(0);
 	let isAdmin = $state(false);
@@ -253,6 +257,41 @@
 		return md;
 	}
 
+	// ── Document Quality Grade helpers ──────────────────
+	function computeOcrQuality(data: any, imgWidth: number, imgHeight: number): { score: number; breakdown: Record<string, number> } {
+		const items: LayoutItem[] = data?.layout_details?.[0]?.filter((item: LayoutItem) => item.content) || [];
+		const imageArea = (imgWidth || 1) * (imgHeight || 1);
+
+		// Text density: ratio of total bbox area to image area
+		let totalBboxArea = 0;
+		for (const item of items) {
+			const [x1, y1, x2, y2] = item.bbox_2d;
+			totalBboxArea += Math.abs((x2 - x1) * (y2 - y1));
+		}
+		const density = totalBboxArea / imageArea;
+		const densityScore = density < 0.02 ? 15 : density < 0.1 ? 40 : density < 0.3 ? 70 : 90;
+
+		// Fragment detection: many very short items = noise
+		const shortItems = items.filter(i => (i.content?.trim().length || 0) < 3).length;
+		const fragRatio = items.length > 0 ? shortItems / items.length : 0;
+		const fragScore = fragRatio > 0.5 ? 20 : fragRatio > 0.3 ? 50 : fragRatio > 0.1 ? 75 : 95;
+
+		// Character anomaly: consecutive special chars
+		const allText = items.map(i => i.content || '').join(' ');
+		const anomalies = (allText.match(/[^a-zA-Z0-9\s.,;:!?'"()\-\/\\€$£%@#&+=]{3,}/g) || []).length;
+		const anomalyRatio = allText.length > 0 ? anomalies / (allText.length / 100) : 0;
+		const anomalyScore = anomalyRatio > 0.5 ? 20 : anomalyRatio > 0.2 ? 50 : anomalyRatio > 0.05 ? 75 : 95;
+
+		const score = Math.round(densityScore * 0.4 + fragScore * 0.3 + anomalyScore * 0.3);
+		return { score, breakdown: { textDensity: densityScore, fragments: fragScore, anomalies: anomalyScore } };
+	}
+
+	function resolveGrade(score: number): { grade: string; emoji: string; color: string } {
+		if (score >= 75) return { grade: 'A', emoji: '🟢', color: 'green' };
+		if (score >= 40) return { grade: 'B', emoji: '🟡', color: 'yellow' };
+		return { grade: 'C', emoji: '🔴', color: 'red' };
+	}
+
 	// ── File processing ─────────────────────────────────
 	async function processFile(file: File) {
 		error = '';
@@ -260,6 +299,8 @@
 		htmlResult = '';
 		rawResponse = null;
 		hoveredIndex = null;
+		gradeResult = null;
+		gradePopover = false;
 		fileName = file.name;
 		fileType = file.type;
 
@@ -318,11 +359,20 @@
 		try {
 			const base64 = await fileToBase64(file);
 			imageBase64 = base64;
-			const res = await fetch('/api/ocr', {
+
+			// Fire OCR and image quality grade in parallel
+			const ocrPromise = fetch('/api/ocr', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ file: base64, fileName: file.name })
 			});
+			const gradePromise = fetch('/api/grade', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ file: base64 })
+			}).then(r => r.ok ? r.json() : null).catch(() => null);
+
+			const [res, gradeData] = await Promise.all([ocrPromise, gradePromise]);
 			const data = await res.json();
 			if (!res.ok) {
 				error = data.error || `OCR failed (${res.status})`;
@@ -332,6 +382,24 @@
 			rawResponse = data;
 			incrementScanCount();
 			updateResult();
+
+			// Compute composite grade
+			const imgW = gradeData?.meta?.width || 1;
+			const imgH = gradeData?.meta?.height || 1;
+			const ocrQuality = computeOcrQuality(data, imgW, imgH);
+			const imageScore = gradeData?.imageScore ?? 50;
+			const compositeScore = Math.round(imageScore * 0.5 + ocrQuality.score * 0.5);
+			const { grade, emoji, color } = resolveGrade(compositeScore);
+			gradeResult = {
+				grade, score: compositeScore, emoji, color,
+				breakdown: {
+					...(gradeData?.breakdown || {}),
+					...ocrQuality.breakdown,
+					imageQuality: imageScore,
+					ocrQuality: ocrQuality.score,
+					composite: compositeScore
+				}
+			};
 		} catch (err) {
 			error = 'Failed to process file: ' + String(err);
 		} finally {
@@ -606,6 +674,8 @@
 		previewUrl = '';
 		fileName = '';
 		hoveredIndex = null;
+		gradeResult = null;
+		gradePopover = false;
 	}
 
 	function handleFormattedHover(e: MouseEvent) {
@@ -668,6 +738,72 @@
 				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
 				<span class="truncate max-w-48">{fileName}</span>
 			</div>
+
+			<!-- Quality Grade Badge -->
+			{#if gradeResult}
+				<div class="relative">
+					<button
+						onclick={() => gradePopover = !gradePopover}
+						class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all border
+							{gradeResult.color === 'green'
+								? 'bg-green-500/10 text-green-500 border-green-500/20 hover:bg-green-500/20'
+								: gradeResult.color === 'yellow'
+									? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20 hover:bg-yellow-500/20'
+									: 'bg-red-500/10 text-red-500 border-red-500/20 hover:bg-red-500/20'}"
+					>
+						<span>{gradeResult.emoji}</span>
+						<span>Grade {gradeResult.grade}</span>
+						<span class="opacity-60">({gradeResult.score})</span>
+					</button>
+
+					{#if gradePopover}
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<div
+							class="absolute top-full mt-2 left-0 z-50 w-72 rounded-xl border shadow-xl p-4 text-xs
+								{darkMode ? 'bg-navy-dark border-white/10 text-slate-300' : 'bg-white border-gray-200 text-slate-600'}"
+						>
+							<div class="flex items-center justify-between mb-3">
+								<span class="font-semibold text-sm {darkMode ? 'text-white' : 'text-slate-900'}">Quality Breakdown</span>
+								<span class="text-lg">{gradeResult.emoji} {gradeResult.grade}</span>
+							</div>
+							<div class="space-y-2">
+								{#each [
+									['Resolution', gradeResult.breakdown.resolution],
+									['Sharpness', gradeResult.breakdown.sharpness],
+									['Contrast', gradeResult.breakdown.contrast],
+									['Text Density', gradeResult.breakdown.textDensity],
+									['Fragment Quality', gradeResult.breakdown.fragments],
+									['Char Anomalies', gradeResult.breakdown.anomalies]
+								] as [label, value]}
+									{#if value !== undefined}
+										<div class="flex items-center gap-2">
+											<span class="w-24 flex-none">{label}</span>
+											<div class="flex-1 h-1.5 rounded-full {darkMode ? 'bg-white/10' : 'bg-gray-200'}">
+												<div
+													class="h-full rounded-full transition-all {(value as number) >= 75 ? 'bg-green-500' : (value as number) >= 40 ? 'bg-yellow-500' : 'bg-red-500'}"
+													style="width: {value}%"
+												></div>
+											</div>
+											<span class="w-8 text-right font-mono">{value}</span>
+										</div>
+									{/if}
+								{/each}
+							</div>
+							<div class="mt-3 pt-2 border-t {darkMode ? 'border-white/10' : 'border-gray-100'}">
+								<p class="{darkMode ? 'text-slate-400' : 'text-slate-500'}">
+									{#if gradeResult.score >= 75}
+										Clean source — results are reliable.
+									{:else if gradeResult.score >= 40}
+										Decent quality — verify key details.
+									{:else}
+										Poor source — human verification recommended.
+									{/if}
+								</p>
+							</div>
+						</div>
+					{/if}
+				</div>
+			{/if}
 
 			<div class="flex-1"></div>
 
