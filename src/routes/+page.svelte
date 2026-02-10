@@ -334,7 +334,7 @@
 			const base64 = await fileToBase64(file);
 			imageBase64 = base64;
 
-			// Fire OCR and image quality grade in parallel
+			// Fire OCR and initial grade (Tesseract + image analysis) in parallel
 			const ocrPromise = fetch('/api/ocr', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
@@ -357,13 +357,31 @@
 			incrementScanCount();
 			updateResult();
 
-			// Use server-computed composite grade (sharp + Tesseract)
-			const compositeScore = gradeData?.compositeScore ?? 50;
-			const { grade, emoji, color } = resolveGrade(compositeScore);
+			// Show initial grade immediately
+			const initialScore = gradeData?.compositeScore ?? 50;
+			const { grade: initGrade, emoji: initEmoji, color: initColor } = resolveGrade(initialScore);
 			gradeResult = {
-				grade, score: compositeScore, emoji, color,
+				grade: initGrade, score: initialScore, emoji: initEmoji, color: initColor,
 				breakdown: gradeData?.breakdown || {}
 			};
+
+			// Cross-check: send GLM OCR text back for Tesseract comparison (non-blocking)
+			const ocrMd = data.md_results || data.data?.md_results || '';
+			if (ocrMd) {
+				fetch('/api/grade', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ file: base64, ocrText: ocrMd })
+				}).then(r => r.ok ? r.json() : null).then(crossData => {
+					if (crossData?.compositeScore != null) {
+						const { grade, emoji, color } = resolveGrade(crossData.compositeScore);
+						gradeResult = {
+							grade, score: crossData.compositeScore, emoji, color,
+							breakdown: crossData.breakdown || {}
+						};
+					}
+				}).catch(() => {});
+			}
 		} catch (err) {
 			error = 'Failed to process file: ' + String(err);
 		} finally {
@@ -732,10 +750,10 @@
 							</div>
 							<div class="space-y-2">
 								{#each [
-									['Resolution', gradeResult.breakdown.resolution],
-									['Sharpness', gradeResult.breakdown.sharpness],
-									['Contrast', gradeResult.breakdown.contrast],
-									['OCR Confidence', gradeResult.breakdown.tesseractConfidence]
+									['OCR Confidence', gradeResult.breakdown.ocrConfidence],
+									['Text Coherence', gradeResult.breakdown.textCoherence],
+									['Legibility', gradeResult.breakdown.legibility],
+									['Cross-Check', gradeResult.breakdown.crossCheck]
 								] as [label, value]}
 									{#if value !== undefined}
 										<div class="flex items-center gap-2">
@@ -754,11 +772,11 @@
 							<div class="mt-3 pt-2 border-t {darkMode ? 'border-white/10' : 'border-gray-100'}">
 								<p class="{darkMode ? 'text-slate-400' : 'text-slate-500'}">
 									{#if gradeResult.score >= 75}
-										Clean source — results are reliable.
+										Document is in good condition — OCR results are reliable.
 									{:else if gradeResult.score >= 40}
-										Decent quality — verify key details.
+										Document shows some wear — verify key details like amounts and dates.
 									{:else}
-										Poor source — human verification recommended.
+										Document is damaged or degraded — human verification strongly recommended.
 									{/if}
 								</p>
 							</div>
