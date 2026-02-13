@@ -33,6 +33,91 @@
 	let gradeResult: { grade: string; score: number; emoji: string; color: string; breakdown: Record<string, number> } | null = $state(null);
 	let gradePopover = $state(false);
 
+	// ── Confidence Overlay ───────────────────────────────
+	interface ConfidenceWord {
+		text: string;
+		confidence: number;
+		bbox: { x0: number; y0: number; x1: number; y1: number };
+	}
+	let confidenceWords: ConfidenceWord[] = $state([]);
+	let confidenceThreshold = $state(70);
+	let confidenceLoading = $state(false);
+	let showConfidenceOverlay = $state(true);
+	let confidenceCanvas: HTMLCanvasElement | undefined = $state(undefined);
+	let previewImg: HTMLImageElement | undefined = $state(undefined);
+	let previewImgMobile: HTMLImageElement | undefined = $state(undefined);
+
+	let lowConfidenceWords = $derived(
+		confidenceWords.filter(w => w.confidence < confidenceThreshold)
+	);
+
+	function drawConfidenceOverlay() {
+		if (!confidenceCanvas || !previewImg) return;
+		const img = previewImg;
+		const canvas = confidenceCanvas;
+		const rect = img.getBoundingClientRect();
+		canvas.width = rect.width;
+		canvas.height = rect.height;
+		canvas.style.width = rect.width + 'px';
+		canvas.style.height = rect.height + 'px';
+		const ctx = canvas.getContext('2d');
+		if (!ctx) return;
+		ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+		if (!showConfidenceOverlay || lowConfidenceWords.length === 0) return;
+
+		const scaleX = rect.width / img.naturalWidth;
+		const scaleY = rect.height / img.naturalHeight;
+
+		for (const word of lowConfidenceWords) {
+			const x = word.bbox.x0 * scaleX;
+			const y = word.bbox.y0 * scaleY;
+			const w = (word.bbox.x1 - word.bbox.x0) * scaleX;
+			const h = (word.bbox.y1 - word.bbox.y0) * scaleY;
+			ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+			ctx.fillRect(x, y, w, h);
+			ctx.strokeStyle = 'rgba(255, 0, 0, 0.8)';
+			ctx.lineWidth = 1;
+			ctx.strokeRect(x, y, w, h);
+		}
+	}
+
+	$effect(() => {
+		// Redraw when threshold, overlay toggle, or words change
+		confidenceThreshold;
+		showConfidenceOverlay;
+		confidenceWords;
+		drawConfidenceOverlay();
+	});
+
+	// Resize observer for canvas
+	$effect(() => {
+		if (!browser || !previewImg) return;
+		const observer = new ResizeObserver(() => drawConfidenceOverlay());
+		observer.observe(previewImg);
+		return () => observer.disconnect();
+	});
+
+	async function fetchConfidence(base64: string) {
+		confidenceLoading = true;
+		confidenceWords = [];
+		try {
+			const res = await fetch('/api/confidence', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ file: base64 })
+			});
+			if (res.ok) {
+				const data = await res.json();
+				confidenceWords = data.words || [];
+			}
+		} catch (err) {
+			console.error('Confidence fetch failed:', err);
+		} finally {
+			confidenceLoading = false;
+		}
+	}
+
 	// ── Scan limit tracking ─────────────────────────────
 	let scanCount = $state(0);
 	let isAdmin = $state(false);
@@ -276,6 +361,8 @@
 		hoveredIndex = null;
 		gradeResult = null;
 		gradePopover = false;
+		confidenceWords = [];
+		confidenceLoading = false;
 		fileName = file.name;
 		fileType = file.type;
 
@@ -357,6 +444,9 @@
 			rawResponse = data;
 			incrementScanCount();
 			updateResult();
+
+			// Fetch word-level confidence (non-blocking)
+			fetchConfidence(base64);
 
 			// Show initial grade immediately
 			const initialScore = gradeData?.compositeScore ?? 50;
@@ -662,6 +752,8 @@
 		hoveredIndex = null;
 		gradeResult = null;
 		gradePopover = false;
+		confidenceWords = [];
+		confidenceLoading = false;
 	}
 
 	function handleFormattedHover(e: MouseEvent) {
@@ -1015,14 +1107,61 @@
 				<!-- ── Left: Preview with bbox overlays ──── -->
 				{#if previewUrl}
 					<div class="hidden md:flex flex-col min-w-0 overflow-hidden" style="width: {splitRatio}%">
+						<!-- Confidence Controls -->
+						{#if confidenceWords.length > 0 || confidenceLoading}
+							<div class="flex-none px-4 py-3 border-b {darkMode ? 'border-white/10 bg-[#0F1D32]' : 'border-gray-200 bg-gray-50'}">
+								<div class="flex items-center gap-3">
+									<!-- Toggle -->
+									<button
+										onclick={() => showConfidenceOverlay = !showConfidenceOverlay}
+										class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all border
+											{showConfidenceOverlay
+												? 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
+												: darkMode ? 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10' : 'bg-gray-100 text-slate-500 border-gray-200 hover:bg-gray-200'}"
+									>
+										{#if confidenceLoading}
+											<div class="w-3 h-3 border-2 border-red-400 border-t-transparent rounded-full animate-spin"></div>
+										{:else}
+											<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+										{/if}
+										{showConfidenceOverlay ? 'Hide' : 'Show'} Overlay
+									</button>
+									<!-- Slider -->
+									<div class="flex-1 flex items-center gap-2">
+										<label class="text-[11px] {darkMode ? 'text-slate-400' : 'text-slate-500'} whitespace-nowrap" for="conf-slider">Confidence Threshold</label>
+										<input
+											id="conf-slider"
+											type="range"
+											min="0"
+											max="100"
+											bind:value={confidenceThreshold}
+											class="flex-1 h-1.5 rounded-full appearance-none cursor-pointer accent-cyan
+												{darkMode ? 'bg-white/10' : 'bg-gray-300'}"
+										/>
+										<span class="text-xs font-mono font-semibold w-10 text-right {darkMode ? 'text-cyan' : 'text-cyan-700'}">{confidenceThreshold}%</span>
+									</div>
+								</div>
+								<p class="text-[10px] mt-1 {darkMode ? 'text-slate-500' : 'text-slate-400'}">
+									Words below this confidence will be highlighted · {lowConfidenceWords.length} of {confidenceWords.length} words flagged
+								</p>
+							</div>
+						{/if}
 						<div class="flex-1 overflow-auto p-4 flex items-start justify-center {darkMode ? 'bg-navy-dark/50' : 'bg-gray-100'}">
 							<!-- Image wrapper: overlays positioned as % of image -->
 							<div class="relative inline-block max-w-full max-h-full">
 								<img
+									bind:this={previewImg}
 									src={previewUrl}
 									alt="Document preview"
 									class="block max-w-full max-h-[calc(100vh-8rem)] object-contain rounded-lg shadow-xl {darkMode ? 'shadow-black/30' : 'shadow-slate-300/50'}"
+									onload={() => drawConfidenceOverlay()}
 								/>
+								<!-- Confidence canvas overlay -->
+								<canvas
+									bind:this={confidenceCanvas}
+									class="absolute top-0 left-0 pointer-events-none rounded-lg"
+									style="width:100%;height:100%;"
+								></canvas>
 								<!-- Bbox overlays for ALL layout items -->
 								{#each sortedOverlays as item, i (item.index)}
 									<!-- svelte-ignore a11y_no_static_element_interactions a11y_mouse_events_have_key_events -->
