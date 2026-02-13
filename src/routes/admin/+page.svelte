@@ -8,11 +8,13 @@
 	let loading = $state(false);
 	let showDebug = $state(false);
 
+	const authHeaders = () => ({ 'Authorization': `Bearer ${password}` });
+
 	async function login() {
 		error = '';
 		loading = true;
 		try {
-			const res = await fetch(`/api/admin/stats?key=${encodeURIComponent(password)}`);
+			const res = await fetch('/api/admin/stats', { headers: authHeaders() });
 			if (!res.ok) {
 				error = res.status === 401 ? 'Wrong password' : 'Server error';
 				loading = false;
@@ -31,7 +33,7 @@
 
 	async function refreshStats() {
 		try {
-			const res = await fetch(`/api/admin/stats?key=${encodeURIComponent(password)}`);
+			const res = await fetch('/api/admin/stats', { headers: authHeaders() });
 			if (res.ok) stats = await res.json();
 			loadDebugData();
 		} catch {}
@@ -45,7 +47,7 @@
 		} catch {}
 		// Server debug logs
 		try {
-			const res = await fetch(`/api/admin/debug?key=${encodeURIComponent(password)}`);
+			const res = await fetch('/api/admin/debug', { headers: authHeaders() });
 			if (res.ok) debugLogs = await res.json();
 		} catch {}
 	}

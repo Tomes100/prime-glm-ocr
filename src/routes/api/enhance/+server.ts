@@ -9,7 +9,12 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 
 	try {
-		const { image, extractedText } = await request.json();
+		// Limit payload to 20MB
+		const raw = await request.text();
+		if (raw.length > 20_000_000) {
+			return json({ error: 'Payload too large (max 20MB)' }, { status: 413 });
+		}
+		const { image, extractedText } = JSON.parse(raw);
 		if (!image || !extractedText) {
 			return json({ error: 'Missing image or extracted text' }, { status: 400 });
 		}

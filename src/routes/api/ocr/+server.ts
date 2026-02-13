@@ -10,7 +10,12 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 	}
 
 	try {
-		const body = await request.json();
+		// Limit payload to 20MB (base64 encoded images)
+		const raw = await request.text();
+		if (raw.length > 20_000_000) {
+			return json({ error: 'File too large (max 20MB)' }, { status: 413 });
+		}
+		const body = JSON.parse(raw);
 		let file = body.file;
 		if (!file) {
 			return json({ error: 'No file provided' }, { status: 400 });

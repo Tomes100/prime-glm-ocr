@@ -3,13 +3,15 @@ import { env } from '$env/dynamic/private';
 import { getStats } from '$lib/scan-store';
 import type { RequestHandler } from './$types';
 
-export const GET: RequestHandler = async ({ url }) => {
+export const GET: RequestHandler = async ({ request, url }) => {
 	const password = env.ADMIN_PASSWORD;
 	if (!password) {
 		return json({ error: 'Admin not configured' }, { status: 500 });
 	}
 
-	const key = url.searchParams.get('key');
+	// Support both Authorization header (preferred) and query param (legacy)
+	const authHeader = request.headers.get('authorization');
+	const key = authHeader?.replace('Bearer ', '') || url.searchParams.get('key');
 	if (key !== password) {
 		return json({ error: 'Unauthorized' }, { status: 401 });
 	}

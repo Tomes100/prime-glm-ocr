@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { marked } from 'marked';
+	import DOMPurify from 'dompurify';
 	import { browser } from '$app/environment';
 
 	const SCAN_LIMIT = 5;
@@ -446,7 +447,10 @@
 	function buildFormattedHtml(md: string): string {
 		let processed = cleanMarkdown(md);
 		processed = insertLineBreaksFromLayout(processed, layoutItems);
-		let html = marked.parse(processed, { async: false, breaks: true }) as string;
+		let html = DOMPurify.sanitize(
+			marked.parse(processed, { async: false, breaks: true }) as string,
+			{ ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'blockquote', 'code', 'pre', 'a', 'span', 'div', 'hr', 'sup', 'sub'], ALLOWED_ATTR: ['class', 'data-index', 'href', 'target', 'rel'] }
+		);
 
 		const debugItems: Array<{
 			index: number;
