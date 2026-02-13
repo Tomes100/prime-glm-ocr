@@ -21,11 +21,12 @@ export const POST: RequestHandler = async ({ request }) => {
 		// Convert to PNG for Tesseract
 		const pngBuffer = await sharp(buffer).png().toBuffer();
 
-		const { data } = await Tesseract.recognize(pngBuffer, 'eng', {
-			logger: () => {}
-		});
+		// Tesseract.js v7: use worker API with { blocks: true } to get word-level data
+		const worker = await Tesseract.createWorker('eng', undefined, { logger: () => {} });
+		const { data } = await worker.recognize(pngBuffer, {}, { blocks: true });
+		await worker.terminate();
 
-		// Words are nested: blocks → paragraphs → lines → words
+		// Extract words from nested structure: blocks → paragraphs → lines → words
 		const words: Array<{ text: string; confidence: number; bbox: { x0: number; y0: number; x1: number; y1: number } }> = [];
 		for (const block of (data.blocks || [])) {
 			for (const para of (block.paragraphs || [])) {
