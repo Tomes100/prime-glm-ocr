@@ -1160,7 +1160,6 @@
 								<canvas
 									bind:this={confidenceCanvas}
 									class="absolute top-0 left-0 pointer-events-none rounded-lg"
-									style="width:100%;height:100%;"
 								></canvas>
 								<!-- Bbox overlays for ALL layout items -->
 								{#each sortedOverlays as item, i (item.index)}
